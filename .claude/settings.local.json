@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__context7__resolve-library-id",
+      "mcp__deepwiki__read_wiki_structure",
+      "Bash(go mod:*)",
+      "WebSearch",
+      "mcp__deepwiki__ask_question",
+      "mcp__context7__query-docs",
+      "Bash(go build:*)",
+      "Bash(go get:*)",
+      "Bash(go doc:*)",
+      "Bash(make build:*)",
+      "Bash(kubectl get:*)",
+      "Bash(limactl list:*)"
+    ]
+  }
+}

@@ -1,0 +1,18 @@
+apiVersion: kpack.io/v1alpha2
+kind: Image
+metadata:
+  name: test-sklearn-model
+  namespace: mlflow-buildpack-test
+spec:
+  tag: localhost:5000/test-sklearn-model
+  serviceAccountName: mlflow-build-service-account
+  builder:
+    name: mlflow-builder
+    kind: ClusterBuilder
+  source:
+    blob:
+      url: file:///workspace/test-model
+  build:
+    env:
+    - name: BP_MLFLOW_MODEL_NAME
+      value: "test-model"

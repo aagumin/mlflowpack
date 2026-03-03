@@ -1,0 +1,10 @@
+apiVersion: kpack.io/v1alpha2
+kind: ClusterStack
+metadata:
+  name: mlflow-stack
+spec:
+  id: io.amazme.fedora-mlserver
+  buildImage:
+    image: amazme/fedora-mlserver-build:43
+  runImage:
+    image: amazme/fedora-mlserver-run:43

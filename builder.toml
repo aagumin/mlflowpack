@@ -1,0 +1,18 @@
+# Builder configuration for MLflow Model Buildpack
+# Uses modern build/run images approach instead of deprecated stack
+
+[[buildpacks]]
+uri = "buildpack/"
+
+[[order]]
+[[order.group]]
+id = "io.amazme.buildpacks.mlflow-model"
+version = "0.1.0"
+
+# Build image - used during build phase
+[build]
+image = "amazme/fedora-mlserver-build:43"
+
+# Run images - used during run phase
+[[run.images]]
+image = "amazme/fedora-mlserver-run:43"

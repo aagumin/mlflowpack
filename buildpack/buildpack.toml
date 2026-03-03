@@ -1,0 +1,20 @@
+api = "0.10"
+
+[buildpack]
+id = "io.amazme.buildpacks.mlflow-model"
+version = "0.1.0"
+name = "MLflow Model Buildpack"
+homepage = "https://github.com/amazme/aipack"
+description = "Buildpack for MLflow models with MLServer runtime"
+
+# Modern targets approach (replaces deprecated stacks)
+[[targets]]
+os = "linux"
+arch = "amd64"
+
+[[targets]]
+os = "linux"
+arch = "arm64"
+
+[metadata]
+include-files = ["bin/detect", "bin/build"]
