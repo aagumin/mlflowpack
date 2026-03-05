@@ -33,9 +33,9 @@ func NewInstallerWithPath(uvPath string) *Installer {
 	}
 }
 
-// InstallPython installs Python of the specified version.
-// Uses: uv python install <version>
-func (i *Installer) InstallPython(ctx context.Context, version string) error {
+// InstallPython installs Python of the specified version to the given directory.
+// Uses: uv python install --install-dir <dir> <version>
+func (i *Installer) InstallPython(ctx context.Context, version, installDir string) error {
 	if version == "" {
 		version = DefaultPythonVersion
 	}
@@ -44,6 +44,7 @@ func (i *Installer) InstallPython(ctx context.Context, version string) error {
 
 	cmd := exec.CommandContext(ctx, i.uvPath,
 		"python", "install",
+		"--install-dir", installDir,
 		version,
 	)
 	cmd.Stdout = os.Stdout
@@ -56,22 +57,22 @@ func (i *Installer) InstallPython(ctx context.Context, version string) error {
 	return nil
 }
 
-// CreateVenv creates a virtual environment using uv with specified Python version.
+// CreateVenv creates a virtual environment using uv with Python from installDir.
 // If venv already exists, it skips creation.
-// Uses: uv venv --python <version> <venvDir>
-func (i *Installer) CreateVenv(ctx context.Context, version, venvDir string) error {
+// Uses: uv venv --python <pythonPath> <venvDir>
+func (i *Installer) CreateVenv(ctx context.Context, pythonPath, venvDir string) error {
 	// Check if venv already exists
-	pythonBin := filepath.Join(venvDir, "bin", "python")
-	if _, err := os.Stat(pythonBin); err == nil {
+	venvPythonBin := filepath.Join(venvDir, "bin", "python")
+	if _, err := os.Stat(venvPythonBin); err == nil {
 		fmt.Printf("Virtual environment already exists at %s, skipping creation\n", venvDir)
 		return nil
 	}
 
-	fmt.Printf("Creating venv with Python %s at %s\n", version, venvDir)
+	fmt.Printf("Creating venv with Python at %s\n", venvDir)
 
 	cmd := exec.CommandContext(ctx, i.uvPath,
 		"venv",
-		"--python", version,
+		"--python", pythonPath,
 		venvDir,
 	)
 	cmd.Stdout = os.Stdout
@@ -143,13 +144,20 @@ func (i *Installer) SetupFromConda(ctx context.Context, condaFile CondaFile, pyt
 		pythonVersion = DefaultPythonVersion
 	}
 
-	// Install Python (uv manages it in ~/.local/share/uv/python)
-	if err := i.InstallPython(ctx, pythonVersion); err != nil {
+	// Install Python to the python layer directory
+	if err := i.InstallPython(ctx, pythonVersion, pythonDir); err != nil {
 		return err
 	}
 
-	// Create virtual environment with the installed Python version
-	if err := i.CreateVenv(ctx, pythonVersion, venvDir); err != nil {
+	// Find the installed Python binary
+	// uv installs to <pythonDir>/cpython-<version>-<platform>/bin/python3
+	pythonBin, err := findPythonBinary(pythonDir)
+	if err != nil {
+		return fmt.Errorf("finding python binary: %w", err)
+	}
+
+	// Create virtual environment with the installed Python
+	if err := i.CreateVenv(ctx, pythonBin, venvDir); err != nil {
 		return err
 	}
 
@@ -162,4 +170,44 @@ func (i *Installer) SetupFromConda(ctx context.Context, condaFile CondaFile, pyt
 	}
 
 	return nil
+}
+
+// findPythonBinary finds the Python binary in a uv-managed installation directory.
+func findPythonBinary(pythonDir string) (string, error) {
+	// Look for cpython-*/bin/python3 pattern
+	entries, err := os.ReadDir(pythonDir)
+	if err != nil {
+		return "", err
+	}
+
+	for _, entry := range entries {
+		name := entry.Name()
+		// Check if it's a cpython directory or symlink to one
+		if len(name) >= 7 && name[:7] == "cpython" {
+			fullPath := filepath.Join(pythonDir, name)
+
+			// Check if it's a symlink and resolve it
+			info, err := os.Stat(fullPath)
+			if err != nil {
+				continue
+			}
+
+			if !info.IsDir() {
+				continue
+			}
+
+			binPath := filepath.Join(fullPath, "bin")
+
+			// Look for python3 or python3.x
+			if files, err := os.ReadDir(binPath); err == nil {
+				for _, f := range files {
+					if f.Name() == "python3" || (len(f.Name()) > 7 && f.Name()[:7] == "python3.") {
+						return filepath.Join(binPath, f.Name()), nil
+					}
+				}
+			}
+		}
+	}
+
+	return "", fmt.Errorf("python binary not found in %s", pythonDir)
 }

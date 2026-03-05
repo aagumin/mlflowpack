@@ -5,34 +5,27 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/buildpacks/libcnb/v2"
+	"github.com/amazme/aipack/buildpack/internal/cnb"
 )
 
 const (
 	// MLmodelFile is the name of the MLflow model descriptor file.
 	MLmodelFile = "MLmodel"
-
-	// LayerName is the name of the layer this buildpack provides.
-	LayerName = "mlflow-model"
 )
 
 // Detect checks if an MLmodel file exists in the application directory.
 // If found, it returns a build plan that provides "mlflow-model".
-func Detect(ctx libcnb.DetectContext) (libcnb.DetectResult, error) {
-	mlmodelPath := filepath.Join(ctx.ApplicationPath, MLmodelFile)
+func Detect(ctx cnb.DetectContext) (cnb.DetectResult, error) {
+	mlmodelPath := filepath.Join(ctx.AppDir, MLmodelFile)
 
 	if _, err := os.Stat(mlmodelPath); os.IsNotExist(err) {
 		// Check if model is specified via environment
 		if _, _, ok := DetectFromEnv(); !ok {
-			return libcnb.DetectResult{
-				Pass: false,
-			}, nil
+			return cnb.DetectResult{Pass: false}, nil
 		}
 	}
 
-	return libcnb.DetectResult{
-		Pass: true,
-	}, nil
+	return cnb.DetectResult{Pass: true}, nil
 }
 
 // DetectFromEnv checks if model parameters are provided via environment variables.

@@ -1,4 +1,4 @@
-api = "0.10"
+api = "0.12"
 
 [buildpack]
 id = "io.amazme.buildpacks.mlflow-model"

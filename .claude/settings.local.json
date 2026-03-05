@@ -12,7 +12,13 @@
       "Bash(go doc:*)",
       "Bash(make build:*)",
       "Bash(kubectl get:*)",
-      "Bash(limactl list:*)"
+      "Bash(limactl list:*)",
+      "Bash(docker run:*)",
+      "Bash(CONTAINER_TOOL=docker make stack:*)",
+      "Bash(make package:*)",
+      "Bash(make builder:*)",
+      "Bash(CONTAINER_TOOL=docker make package:*)",
+      "Bash(source:*)"
     ]
   }
 }

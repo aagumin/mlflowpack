@@ -8,9 +8,8 @@
 2. [Базовое использование](#базовое-использование)
 3. [Сборка с MLflow Registry](#сборка-с-mlflow-registry)
 4. [Конфигурация](#конфигурация)
-5. [Kubernetes и kpack](#kubernetes-и-kpack)
-6. [Инференс](#инференс)
-7. [Troubleshooting](#troubleshooting)
+5. [Инференс](#инференс)
+6. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -22,7 +21,7 @@
 |------------|--------|------------|
 | pack | >= 0.30.0 | CLI для работы с buildpacks |
 | Docker или Podman | любой | Container runtime |
-| Go | >= 1.21 | Только для разработки |
+| Lima | любой | Docker на macOS (опционально) |
 
 ### Установка pack
 
@@ -40,13 +39,27 @@ sudo apt-get update && sudo apt-get install -y pack
 (curl -sSL "https://github.com/buildpacks/pack/releases/download/v0.37.0/pack-v0.37.0-linux-$(uname -m | sed 's/x86_64/amd64/').tgz" | sudo tar -C /usr/local/bin/ --no-same-owner -xz pack)
 ```
 
+### Lima на macOS (Опционально)
+
+```bash
+# Установка Lima
+brew install lima
+
+# Создать VM с Docker
+limactl start template://docker
+
+# Использовать lima prefix для docker и pack
+lima docker ps
+lima pack --version
+```
+
 ### Получение builder
 
 **Вариант 1: Собрать локально**
 ```bash
 git clone https://github.com/amazme/aipack.git
 cd aipack
-make stack builder
+make builder
 ```
 
 **Вариант 2: Использовать готовый (когда опубликован)**
@@ -70,57 +83,43 @@ my-model/
 └── requirements.txt
 ```
 
-Сборка:
+**macOS с Lima:**
+```bash
+lima pack build my-model-image \
+  --builder amazme/mlserver-builder:0.1.0 \
+  --path my-model \
+  --pull-policy never \
+  --docker-host=inherit \
+  --trust-builder
+```
+
+**Linux:**
 ```bash
 pack build my-model-image \
   --builder amazme/mlserver-builder:0.1.0 \
   --path my-model
 ```
 
-### Сценарий 2: Создание тестовой модели
+### Сценарий 2: Использование тестовой модели
+
+В репозитории есть готовая тестовая модель в папке `test-model/`:
 
 ```bash
-# Создать простую sklearn модель для тестов
-cd /tmp
-mkdir test-model
-cd test-model
-
-# Python скрипт для создания модели
-python3 << 'EOF'
-import mlflow.sklearn
-import yaml
-from sklearn.datasets import load_iris
-from sklearn.ensemble import RandomForestClassifier
-
-# Обучить модель
-X, y = load_iris(return_X_y=True)
-model = RandomForestClassifier(n_estimators=100)
-model.fit(X, y)
-
-# Сохранить в MLflow формате
-mlflow.sklearn.save_model(model, "model")
-
-# Создать conda.yaml
-conda_env = {
-    "channels": ["defaults", "conda-forge"],
-    "dependencies": [
-        "python=3.11",
-        {"pip": ["scikit-learn==1.3.0"]}
-    ]
-}
-with open("model/conda.yaml", "w") as f:
-    yaml.dump(conda_env, f)
-
-# Переместить MLmodel в корень
-import shutil
-shutil.move("model/MLmodel", "MLmodel")
-print("Model created in /tmp/test-model")
-EOF
-
-# Собрать
-pack build iris-classifier \
+# Сборка (macOS с Lima)
+lima pack build test-mlflow-model \
   --builder amazme/mlserver-builder:0.1.0 \
-  --path .
+  --path test-model \
+  --pull-policy never \
+  --docker-host=inherit \
+  --trust-builder
+
+# Запуск
+docker run --rm -p 8080:8080 -e MLSERVER_PARALLEL_WORKERS=0 test-mlflow-model:latest
+
+# Тест инференса
+curl -X POST http://localhost:8080/v2/models/model/infer \
+  -H "Content-Type: application/json" \
+  -d '{"inputs": [{"name": "input", "shape": [1, 4], "datatype": "FP32", "data": [[5.1, 3.5, 1.4, 0.2]]}]}'
 ```
 
 ---
@@ -129,7 +128,7 @@ pack build iris-classifier \
 
 ### Настройка Service Bindings
 
-Service Bindings — это механизм передачи credentials в buildpack.
+Service Bindings — механизм передачи credentials в buildpack.
 
 ```bash
 # Создать структуру директорий
@@ -160,12 +159,22 @@ export BP_MLFLOW_MODEL_STAGE="Production"
 ### Полная команда сборки
 
 ```bash
-pack build my-registry-model \
+# macOS с Lima
+lima pack build my-registry-model \
   --builder amazme/mlserver-builder:0.1.0 \
   --env BP_MLFLOW_MODEL_NAME=my-classifier \
   --env BP_MLFLOW_MODEL_VERSION=latest \
   --volume $(pwd)/bindings:/bindings/mlflow \
-  --path /empty  # Пустой path, модель скачивается из registry
+  --pull-policy never \
+  --docker-host=inherit \
+  --trust-builder
+
+# Linux
+pack build my-registry-model \
+  --builder amazme/mlserver-builder:0.1.0 \
+  --env BP_MLFLOW_MODEL_NAME=my-classifier \
+  --env BP_MLFLOW_MODEL_VERSION=latest \
+  --volume $(pwd)/bindings:/bindings/mlflow
 ```
 
 ---
@@ -217,113 +226,7 @@ dependencies:
     - numpy>=1.24.0
 ```
 
-Если `conda.yaml` отсутствует, используется Python 3.11 по умолчанию.
-
----
-
-## Kubernetes и kpack
-
-### Предварительные требования
-
-- Kubernetes кластер
-- [kpack](https://github.com/pivotal/kpack) установлен
-- Service Account с доступом к registry
-
-### Установка kpack
-
-```bash
-kubectl apply -f https://github.com/pivotal/kpack/releases/download/v0.14.0/release-0.14.0.yaml
-```
-
-### ClusterBuilder
-
-```yaml
-apiVersion: kpack.io/v1alpha2
-kind: ClusterBuilder
-metadata:
-  name: mlserver-builder
-spec:
-  tag: registry.example.com/mlserver-builder
-  stack:
-    name: mlserver-stack
-    kind: ClusterStack
-  store:
-    name: default
-    kind: ClusterStore
-  serviceAccountRef:
-    name: mlflow-service-account
-    namespace: default
-  order:
-    - group:
-        - id: io.amazme.buildpacks.mlflow-model
-```
-
-### Image с моделью из registry
-
-```yaml
-apiVersion: kpack.io/v1alpha2
-kind: Image
-metadata:
-  name: sklearn-model
-spec:
-  tag: registry.example.com/models/sklearn:latest
-  builder:
-    name: mlserver-builder
-    kind: ClusterBuilder
-  serviceAccountName: mlflow-service-account
-  source:
-    # Пустой source - модель скачивается из MLflow
-    blob:
-      url: file:///dev/null
-  env:
-    - name: BP_MLFLOW_MODEL_NAME
-      value: "iris-classifier"
-    - name: BP_MLFLOW_MODEL_VERSION
-      value: "latest"
-  # Service bindings через Secret
-  bindings:
-    - name: mlflow
-      metadata:
-        type: mlflow
-        tracking_uri: https://mlflow.example.com
-      secretRef:
-        name: mlflow-credentials
-```
-
-### Service Binding Secret
-
-```yaml
-apiVersion: v1
-kind: Secret
-metadata:
-  name: mlflow-credentials
-  namespace: default
-type: Opaque
-stringData:
-  username: "mlflow-user"
-  password: "mlflow-password"
-  s3-endpoint: "https://s3.example.com"
-  s3-access_key: "AKIAIOSFODNN7EXAMPLE"
-  s3-secret_key: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
-```
-
-### Service Binding
-
-```yaml
-apiVersion: servicebinding.io/v1alpha3
-kind: ServiceBinding
-metadata:
-  name: mlflow-binding
-spec:
-  service:
-    apiVersion: v1
-    kind: Secret
-    name: mlflow-credentials
-  workload:
-    apiVersion: kpack.io/v1alpha2
-    kind: Image
-    name: sklearn-model
-```
+Если `conda.yaml` отсутствует, используется Python 3.10 по умолчанию.
 
 ---
 
@@ -364,8 +267,8 @@ curl -X POST http://localhost:8080/v2/models/model/infer \
   "id": "test-1",
   "model_name": "model",
   "outputs": [{
-    "name": "output-0",
-    "shape": [1],
+    "name": "predict",
+    "shape": [1, 1],
     "datatype": "INT64",
     "data": [0]
   }]
@@ -413,6 +316,9 @@ spec:
               name: http
             - containerPort: 9080
               name: grpc
+          env:
+            - name: MLSERVER_PARALLEL_WORKERS
+              value: "0"
           resources:
             requests:
               memory: "512Mi"
@@ -476,10 +382,13 @@ spec:
 ### Включение debug логов
 
 ```bash
-pack build my-model \
+lima pack build my-model \
   --builder amazme/mlserver-builder:0.1.0 \
   --path my-model \
   --env CNB_LOG_LEVEL=debug \
+  --pull-policy never \
+  --docker-host=inherit \
+  --trust-builder \
   -v
 ```
 
@@ -505,4 +414,3 @@ env | grep PYTHON
 - [MLServer Documentation](https://mlserver.readthedocs.io/)
 - [MLflow Documentation](https://mlflow.org/docs/latest/index.html)
 - [V2 Inference Protocol](https://github.com/kserve/kserve/blob/master/docs/predict-api/v2/required_api.md)
-- [kpack Documentation](https://github.com/pivotal/kpack/blob/main/docs/README.md)

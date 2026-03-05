@@ -1,4 +1,5 @@
 # Run Image for MLflow Model Buildpack
+# Buildpack API 0.12 compatible
 FROM quay.io/fedora/fedora-minimal:43
 
 # Use Yandex mirror (Russia) - replace metalink with baseurl
@@ -22,15 +23,19 @@ RUN pip3 install --no-cache-dir --break-system-packages \
     mlserver==1.7.1 \
     mlserver-mlflow
 
-# CNB user setup (non-root)
-ENV CNB_USER_ID=1000
-ENV CNB_GROUP_ID=1000
-RUN groupadd -g ${CNB_GROUP_ID} cnb && \
-    useradd -u ${CNB_USER_ID} -g cnb -m -s /bin/bash cnb
+# CNB user setup (required for buildpack API 0.12)
+ARG cnb_uid=1000
+ARG cnb_gid=1000
+ENV CNB_USER_ID=${cnb_uid}
+ENV CNB_GROUP_ID=${cnb_gid}
 
-# CNB environment
-ENV CNB_STACK_ID="io.amazme.fedora-mlserver"
-LABEL io.buildpacks.stack.id="io.amazme.fedora-mlserver"
+# Create user and group
+RUN groupadd cnb --gid ${CNB_GROUP_ID} && \
+    useradd --uid ${CNB_USER_ID} --gid ${CNB_GROUP_ID} -m -s /bin/bash cnb
+
+# Set required CNB target labels (API 0.12)
+LABEL io.buildpacks.base.distro.name="fedora"
+LABEL io.buildpacks.base.distro.version="43"
 
 # MLServer defaults
 ENV MLSERVER_MODEL_NAME="model"
@@ -43,7 +48,7 @@ ENV MLSERVER_GRPC_PORT="9080"
 # Create model directory
 RUN mkdir -p /opt/mlflow && chown -R cnb:cnb /opt/mlflow
 
-USER cnb
+USER ${CNB_USER_ID}:${CNB_GROUP_ID}
 WORKDIR /home/cnb
 
 EXPOSE 8080 9080

@@ -6,20 +6,20 @@ CNCF Buildpack для сборки container-образов с ML моделям
 
 - **Unprivileged сборка** — работает в rootless режиме без специальных привилегий
 - **MLServer runtime** — использует Seldon MLServer для инференса
-- **Автоопределение flavor** — автоматически выбирает нужный MLServer extension (sklearn, xgboost, lightgbm, tensorflow, pytorch, transformers)
+- **Автоопределение flavor** — автоматически выбирает нужный MLServer extension
 - **Быстрая установка зависимостей** — использует uv вместо pip
-- **Совместимость** — работает с pack, kpack, и кастомными Kubernetes операторами
+- **Поддержка macOS** — работает с Lima + Docker
 
 ## Поддерживаемые модели
 
-| Flavor | MLServer Extension | Runtime |
-|--------|-------------------|---------|
-| sklearn | mlserver-sklearn | mlserver_sklearn.SKLearnRuntime |
-| xgboost | mlserver-xgboost | mlserver_xgboost.XGBoostRuntime |
-| lightgbm | mlserver-lightgbm | mlserver_lightgbm.LightGBMRuntime |
-| tensorflow | mlserver-tensorflow | mlserver_tensorflow.TensorFlowRuntime |
-| pytorch | mlserver-torchserve | mlserver_torchserve.TorchServeRuntime |
-| transformers | mlserver-huggingface | mlserver_huggingface.HuggingFaceRuntime |
+| Flavor | Pip Package | Runtime |
+|--------|-------------|---------|
+| sklearn | mlserver-sklearn | mlserver_sklearn.SKLearnModel |
+| xgboost | mlserver-xgboost | mlserver_xgboost.XGBoostModel |
+| lightgbm | mlserver-lightgbm | mlserver_lightgbm.LightGBMModel |
+| tensorflow | mlserver-tensorflow | mlserver_tensorflow.TensorFlowModel |
+| pytorch | mlserver-torchserve | mlserver_torchserve.TorchServeModel |
+| transformers | mlserver-huggingface | mlserver_huggingface.HuggingFaceModel |
 
 ## Быстрый старт
 
@@ -28,24 +28,43 @@ CNCF Buildpack для сборки container-образов с ML моделям
 - [pack](https://buildpacks.io/docs/tools/pack/) >= 0.30.0
 - Docker или Podman
 - Go >= 1.21 (для разработки)
+- Lima (на macOS)
 
-### Локальная сборка с локальной моделью
+### Установка
+
+```bash
+# macOS
+brew install pack lima
+
+# Linux
+# pack: https://buildpacks.io/docs/tools/pack/
+```
+
+### Локальная сборка
 
 ```bash
 # Клонировать репозиторий
 git clone https://github.com/amazme/aipack.git
 cd aipack
 
-# Собрать stack images и builder
-make stack builder
+# Собрать builder
+make builder
 
-# Собрать образ с моделью
-pack build my-mlflow-model \
-  --builder amazme/mlserver-builder:0.1.0 \
-  --path /path/to/model/with/MLmodel
+# Собрать образ с моделью (macOS с Lima)
+lima pack build my-mlflow-model \
+  --builder amazme/mlserver-builder:<version> \
+  --path test-model \
+  --pull-policy never \
+  --docker-host=inherit \
+  --trust-builder
 
 # Запустить
-docker run -p 8080:8080 my-mlflow-model
+docker run -p 8080:8080 -e MLSERVER_PARALLEL_WORKERS=0 my-mlflow-model
+
+# Тест инференса
+curl -X POST http://localhost:8080/v2/models/model/infer \
+  -H "Content-Type: application/json" \
+  -d '{"inputs": [{"name": "input", "shape": [1, 4], "datatype": "FP32", "data": [[5.1, 3.5, 1.4, 0.2]]}]}'
 ```
 
 ### Сборка с моделью из MLflow Registry
@@ -55,71 +74,27 @@ docker run -p 8080:8080 my-mlflow-model
 mkdir -p bindings/mlflow
 echo "mlflow" > bindings/mlflow/type
 echo "https://mlflow.example.com" > bindings/mlflow/tracking_uri
-echo "username" > bindings/mlflow/username
-echo "password" > bindings/mlflow/password
 
-# S3 credentials (если артефакты в S3)
-mkdir -p bindings/mlflow/s3
-echo "https://s3.example.com" > bindings/mlflow/s3/endpoint
-echo "access_key" > bindings/mlflow/s3/access_key
-echo "secret_key" > bindings/mlflow/s3/secret_key
-
-# Собрать с переменными окружения
-pack build my-model \
-  --builder amazme/mlserver-builder:0.1.0 \
+# Собрать
+lima pack build my-model \
+  --builder amazme/mlserver-builder:<version> \
   --env BP_MLFLOW_MODEL_NAME=my-classifier \
   --env BP_MLFLOW_MODEL_VERSION=latest \
-  --volume ./bindings:/bindings/mlflow
-```
-
-### Запуск инференса
-
-```bash
-# HTTP API
-curl -X POST http://localhost:8080/v2/models/model/infer \
-  -H "Content-Type: application/json" \
-  -d '{"inputs": [{"name": "input", "shape": [1, 4], "datatype": "FP32", "data": [[5.1, 3.5, 1.4, 0.2]]}]}'
-
-# gRPC API (порт 9080)
-grpcurl -plaintext localhost:9080 list
-```
-
-## Структура проекта
-
-```
-aipack/
-├── buildpack/                 # CNB Buildpack
-│   ├── cmd/
-│   │   ├── detect/main.go     # Detect phase
-│   │   └── build/main.go      # Build phase
-│   ├── internal/
-│   │   ├── detect/            # Detection logic
-│   │   ├── build/             # Build logic
-│   │   ├── mlflow/            # MLflow client & model parsing
-│   │   ├── conda/             # conda.yaml parser
-│   │   ├── python/            # Python installer (uv)
-│   │   └── layer/             # Layer utilities
-│   ├── buildpack.toml
-│   └── package.toml
-├── stack/
-│   ├── build/Dockerfile       # Build image
-│   └── run/Dockerfile         # Run image
-├── builder.toml               # Builder configuration
-├── Makefile
-└── docs/
-    └── USAGE.md               # Подробная документация
+  --volume ./bindings:/bindings/mlflow \
+  --pull-policy never \
+  --docker-host=inherit \
+  --trust-builder
 ```
 
 ## Команды Makefile
 
 ```bash
-make build          # Собрать buildpack binaries
-make test           # Запустить unit тесты
-make lint           # Запустить linter
-make stack          # Собрать stack images (build + run)
-make package        # Упаковать buildpack
-make builder        # Создать builder
-make test-build     # Тестовая сборка модели
+make build     # Собрать buildpack binaries
+make test      # Запустить unit тесты
+make lint      # Запустить linter
+make stack     # Собрать stack images
+make package   # Упаковать buildpack
+make builder   # Создать builder (stack + package)
 ```
 
 ## Конфигурация
@@ -143,38 +118,13 @@ make test-build     # Тестовая сборка модели
 └── s3/            # S3 credentials (optional)
     ├── endpoint
     ├── access_key
-    ├── secret_key
-    └── region
+    └── secret_key
 ```
 
-## Kubernetes / kpack
+## Документация
 
-Пример использования с kpack:
-
-```yaml
-apiVersion: kpack.io/v1alpha2
-kind: Image
-metadata:
-  name: mlflow-model-image
-spec:
-  tag: registry.example.com/my-model:latest
-  builder:
-    name: mlserver-builder
-    kind: ClusterBuilder
-  serviceAccountName: mlflow-service-account
-  source:
-    blob:
-      url: file:///empty  # Пустой source, модель из registry
-  env:
-    - name: BP_MLFLOW_MODEL_NAME
-      value: "my-classifier"
-    - name: BP_MLFLOW_MODEL_VERSION
-      value: "latest"
-```
-
-## Разработка
-
-См. [CONTRIBUTING.md](CONTRIBUTING.md) для руководства по разработке.
+- [USAGE.md](docs/USAGE.md) — подробное руководство пользователя
+- [CONTRIBUTING.md](CONTRIBUTING.md) — руководство по разработке
 
 ## Лицензия
 

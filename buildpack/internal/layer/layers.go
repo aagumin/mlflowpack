@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/buildpacks/libcnb/v2"
+	"github.com/amazme/aipack/buildpack/internal/cnb"
 )
 
 const (
@@ -20,8 +20,8 @@ const (
 )
 
 // DefaultPythonLayerTypes returns the layer types for the Python layer.
-func DefaultPythonLayerTypes() libcnb.LayerTypes {
-	return libcnb.LayerTypes{
+func DefaultPythonLayerTypes() cnb.LayerTypes {
+	return cnb.LayerTypes{
 		Build:  true,
 		Launch: true,
 		Cache:  true,
@@ -29,8 +29,8 @@ func DefaultPythonLayerTypes() libcnb.LayerTypes {
 }
 
 // DefaultVenvLayerTypes returns the layer types for the venv layer.
-func DefaultVenvLayerTypes() libcnb.LayerTypes {
-	return libcnb.LayerTypes{
+func DefaultVenvLayerTypes() cnb.LayerTypes {
+	return cnb.LayerTypes{
 		Build:  false,
 		Launch: true,
 		Cache:  true,
@@ -38,8 +38,8 @@ func DefaultVenvLayerTypes() libcnb.LayerTypes {
 }
 
 // DefaultModelLayerTypes returns the layer types for the model layer.
-func DefaultModelLayerTypes() libcnb.LayerTypes {
-	return libcnb.LayerTypes{
+func DefaultModelLayerTypes() cnb.LayerTypes {
+	return cnb.LayerTypes{
 		Build:  false,
 		Launch: true,
 		Cache:  true,
@@ -53,9 +53,7 @@ type Manager struct {
 
 // NewManager creates a new layer manager.
 func NewManager(layersDir string) *Manager {
-	return &Manager{
-		layersDir: layersDir,
-	}
+	return &Manager{layersDir: layersDir}
 }
 
 // GetLayerPath returns the full path for a named layer.
@@ -72,22 +70,17 @@ func (m *Manager) EnsureLayer(name string) (string, error) {
 	return path, nil
 }
 
-// AppendToPath appends a path to the PATH environment variable.
-func AppendToPath(layer *libcnb.Layer, path string) {
-	layer.SharedEnvironment.Append("PATH", string(os.PathListSeparator), path)
-}
+// SetupLayer creates the layer directory and writes layer.toml.
+func SetupLayer(layersDir, layerName string, types cnb.LayerTypes) (string, error) {
+	path := filepath.Join(layersDir, layerName)
+	if err := os.MkdirAll(path, 0755); err != nil {
+		return "", err
+	}
 
-// PrependToPath prepends a path to the PATH environment variable.
-func PrependToPath(layer *libcnb.Layer, path string) {
-	layer.SharedEnvironment.Prepend("PATH", string(os.PathListSeparator), path)
-}
+	// Write layer.toml
+	if err := cnb.WriteLayerToml(layersDir, layerName, cnb.LayerMetadata{Types: types}); err != nil {
+		return "", err
+	}
 
-// SetPythonPath sets the PYTHONPATH environment variable.
-func SetPythonPath(layer *libcnb.Layer, path string) {
-	layer.SharedEnvironment.Default("PYTHONPATH", path)
-}
-
-// SetLayerEnv sets an environment variable in the layer.
-func SetLayerEnv(layer *libcnb.Layer, name, value string) {
-	layer.SharedEnvironment.Default(name, value)
+	return path, nil
 }

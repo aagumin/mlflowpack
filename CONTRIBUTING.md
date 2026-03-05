@@ -2,6 +2,59 @@
 
 Спасибо за интерес к проекту! Этот документ описывает процесс разработки и внесения изменений.
 
+## Соглашения
+
+### Коммиты
+
+Проект следует [Conventional Commits v1.0.0](https://www.conventionalcommits.org/en/v1.0.0/).
+
+Формат сообщения коммита:
+
+```
+<type>(<scope>): <description>
+
+[optional body]
+
+[optional footer(s)]
+```
+
+**Типы:**
+- `feat` — новая функциональность
+- `fix` — исправление бага
+- `docs` — изменения в документации
+- `style` — форматирование, пропущенные точки с запятой
+- `refactor` — рефакторинг без изменения поведения
+- `test` — добавление или исправление тестов
+- `chore` — изменения в сборке, инструментах
+
+**Примеры:**
+
+```bash
+feat(mlflow): add support for LightGBM flavor
+fix(python): correct Python binary lookup in uv installation
+docs(readme): update installation instructions
+refactor(build): simplify layer creation logic
+```
+
+### Go Code Style
+
+Проект следует [Uber Go Style Guide](https://github.com/uber-go/guide/blob/master/style.md).
+
+Ключевые принципы:
+- Используйте `gofmt` и `goimports`
+- Избегайте неинформативных имён (data, info, thing)
+- Возвращайте интерфейсы, принимайте конкретные типы
+- Предпочитайте каналы вместо мьютексов для коммуникации
+- Используйте контекст для отмены операций
+
+```bash
+# Установка линтеров
+go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+
+# Проверка
+make lint
+```
+
 ## Разработка
 
 ### Предварительные требования
@@ -38,123 +91,84 @@ make build
 ### Структура проекта
 
 ```
-buildpack/
-├── cmd/
-│   ├── detect/main.go      # Точка входа detect phase
-│   └── build/main.go       # Точка входа build phase
-├── internal/
-│   ├── detect/
-│   │   └── detector.go     # Логика детекции
-│   ├── build/
-│   │   └── builder.go      # Основная логика сборки
-│   ├── mlflow/
-│   │   ├── client.go       # MLflow API клиент
-│   │   ├── model.go        # Работа с моделью
-│   │   ├── flavor.go       # Определение flavor
-│   │   └── storage/
-│   │       └── s3.go       # S3 backend
-│   ├── conda/
-│   │   └── parser.go       # Парсер conda.yaml
-│   ├── python/
-│   │   └── installer.go    # Установка Python через uv
-│   ├── bindings/
-│   │   └── bindings.go     # Service bindings
-│   └── layer/
-│       └── layers.go       # Утилиты для слоёв
-├── buildpack.toml          # Метаданные buildpack
-├── package.toml            # Конфигурация упаковки
-└── go.mod
+aipack/
+├── buildpack/                   # CNB Buildpack
+│   ├── cmd/
+│   │   ├── detect/main.go       # Точка входа detect phase
+│   │   └── build/main.go        # Точка входа build phase
+│   ├── internal/
+│   │   ├── cnb/                 # CNB API типы
+│   │   ├── detect/detector.go   # Логика детекции
+│   │   ├── build/builder.go     # Основная логика сборки
+│   │   ├── mlflow/              # MLflow client и парсеры
+│   │   ├── conda/parser.go      # Парсер conda.yaml
+│   │   ├── python/installer.go  # Установка Python через uv
+│   │   └── layer/layers.go      # Управление слоями
+│   ├── buildpack.toml
+│   └── go.mod
+├── stack/
+│   ├── build/Dockerfile         # Build image
+│   └── run/Dockerfile           # Run image
+├── test-model/                  # Тестовая модель для локальной проверки
+├── docs/
+│   └── plans/                   # Дизайн документы
+├── Makefile
+└── builder.toml
 ```
 
-### Запуск тестов
+### Сборка и тестирование
 
 ```bash
-# Unit тесты
+# Сборка buildpack
+make build
+
+# Запуск unit тестов
 make test
-# или
-cd buildpack && go test -v -race ./...
 
-# Тесты конкретного пакета
-cd buildpack && go test -v ./internal/mlflow/...
-
-# Lint
+# Линтинг
 make lint
-# или
-cd buildpack && golangci-lint run ./...
+
+# Полный цикл: stack + package + builder
+make builder
 ```
 
-### Стиль кода
-
-- Используйте `gofmt` для форматирования
-- Следуйте [Go Code Review Comments](https://github.com/golang/go/wiki/CodeReviewComments)
-- Документируйте экспортируемые функции и типы
-- Пишите тесты для новой функциональности
-
-### Создание изменений
-
-1. Создайте ветку для feature/fix:
-   ```bash
-   git checkout -b feature/my-feature
-   ```
-
-2. Внесите изменения и добавьте тесты
-
-3. Убедитесь что тесты проходят:
-   ```bash
-   make test lint
-   ```
-
-4. Сделайте коммит:
-   ```bash
-   git commit -m "feat: add support for new model flavor"
-   ```
-
-   Используйте [Conventional Commits](https://www.conventionalcommits.org/):
-   - `feat:` — новая функциональность
-   - `fix:` — исправление бага
-   - `docs:` — документация
-   - `test:` — тесты
-   - `refactor:` — рефакторинг
-   - `chore:` — обслуживание
-
-### Тестирование изменений
-
-Для полноценного тестирования нужно пересобрать builder:
+### Локальное тестирование с моделью
 
 ```bash
-# Пересобрать всё
-make clean build stack package builder
+# Сборка тестового образа
+lima pack build test-mlflow-model \
+  --builder amazme/mlserver-builder:<version> \
+  --path test-model \
+  --pull-policy never \
+  --docker-host=inherit \
+  --trust-builder
 
-# Тестовая сборка модели
-make test-build
+# Запуск контейнера
+docker run --rm -p 8080:8080 -e MLSERVER_PARALLEL_WORKERS=0 test-mlflow-model:latest
 
-# Запустить образ
-docker run -p 8080:8080 test-mlflow-model
-
-# Проверить инференс
+# Тестирование предсказания
 curl -X POST http://localhost:8080/v2/models/model/infer \
   -H "Content-Type: application/json" \
   -d '{"inputs": [{"name": "input", "shape": [1, 4], "datatype": "FP32", "data": [[5.1, 3.5, 1.4, 0.2]]}]}'
 ```
 
-### Добавление поддержки нового flavor
+### Добавление нового MLflow flavor
 
-1. Добавьте маппинг в `internal/mlflow/flavor.go`:
+1. Добавьте маппинг в `buildpack/internal/mlflow/flavor.go`:
+
    ```go
    var MLServerExtensions = map[string]MLServerExtension{
-       // ... существующие
-       "new_flavor": {
+       // ...
+       "newflavor": {
            PipPackage: "mlserver-newflavor",
-           Runtime:    "mlserver_newflavor.NewFlavorRuntime",
+           Runtime:    "mlserver_newflavor.NewFlavorModel",
        },
    }
    ```
 
 2. Обновите приоритет в `GetPrimaryFlavor()`
 
-3. Добавьте тесты
-
-4. Обновите документацию (README.md, docs/USAGE.md)
+3. Обновите документацию (README.md, docs/USAGE.md)
 
 ### Отладка
 
@@ -180,7 +194,7 @@ docker cp debug:/layers ./layers-debug
 find layers-debug -type f | head -50
 ```
 
-### CI/CD
+## CI/CD
 
 Проект использует GitHub Actions для:
 - Запуска тестов при PR

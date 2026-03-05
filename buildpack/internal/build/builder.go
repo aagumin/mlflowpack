@@ -3,19 +3,20 @@ package build
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/amazme/aipack/buildpack/internal/bindings"
+	"github.com/amazme/aipack/buildpack/internal/cnb"
 	"github.com/amazme/aipack/buildpack/internal/conda"
 	"github.com/amazme/aipack/buildpack/internal/detect"
 	"github.com/amazme/aipack/buildpack/internal/layer"
 	"github.com/amazme/aipack/buildpack/internal/mlflow"
 	"github.com/amazme/aipack/buildpack/internal/mlflow/storage"
 	"github.com/amazme/aipack/buildpack/internal/python"
-	"github.com/buildpacks/libcnb/v2"
 )
 
 const (
@@ -30,8 +31,10 @@ const (
 )
 
 // Build executes the build phase.
-func Build(ctx libcnb.BuildContext) (libcnb.BuildResult, error) {
-	result := libcnb.NewBuildResult()
+func Build(ctx cnb.BuildContext) (cnb.BuildResult, error) {
+	result := cnb.BuildResult{
+		Layers: make(map[string]cnb.LayerMetadata),
+	}
 
 	// Determine model source
 	modelSource, err := determineModelSource(ctx)
@@ -66,60 +69,67 @@ func Build(ctx libcnb.BuildContext) (libcnb.BuildResult, error) {
 		return result, err
 	}
 
-	// Add MLServer extension to dependencies if not already present
-	addMLServerExtension(condaFile, mlserverExt.PipPackage)
+	// Add MLServer core and extension to dependencies if not already present
+	addMLServerDependencies(condaFile, mlserverExt.PipPackage)
 
 	// Create Python layer
-	pythonLayer, err := ctx.Layers.Layer(layer.PythonLayerName)
+	pythonPath, err := layer.SetupLayer(ctx.LayersDir, layer.PythonLayerName, layer.DefaultPythonLayerTypes())
 	if err != nil {
 		return result, fmt.Errorf("creating python layer: %w", err)
 	}
-	pythonLayer.LayerTypes = layer.DefaultPythonLayerTypes()
+	result.Layers[layer.PythonLayerName] = cnb.LayerMetadata{Types: layer.DefaultPythonLayerTypes()}
 
 	// Create venv layer
-	venvLayer, err := ctx.Layers.Layer(layer.VenvLayerName)
+	venvPath, err := layer.SetupLayer(ctx.LayersDir, layer.VenvLayerName, layer.DefaultVenvLayerTypes())
 	if err != nil {
 		return result, fmt.Errorf("creating venv layer: %w", err)
 	}
-	venvLayer.LayerTypes = layer.DefaultVenvLayerTypes()
+	result.Layers[layer.VenvLayerName] = cnb.LayerMetadata{Types: layer.DefaultVenvLayerTypes()}
 
 	// Create model layer
-	modelLayer, err := ctx.Layers.Layer(layer.ModelLayerName)
+	modelPath, err := layer.SetupLayer(ctx.LayersDir, layer.ModelLayerName, layer.DefaultModelLayerTypes())
 	if err != nil {
 		return result, fmt.Errorf("creating model layer: %w", err)
 	}
-	modelLayer.LayerTypes = layer.DefaultModelLayerTypes()
+	result.Layers[layer.ModelLayerName] = cnb.LayerMetadata{Types: layer.DefaultModelLayerTypes()}
 
 	// Install Python and dependencies using uv
 	installer := python.NewInstaller()
-	if err := installer.SetupFromConda(context.Background(), condaFile, pythonLayer.Path, venvLayer.Path); err != nil {
+	if err := installer.SetupFromConda(context.Background(), condaFile, pythonPath, venvPath); err != nil {
 		return result, fmt.Errorf("setting up Python: %w", err)
 	}
 
-	// Configure PATH
-	layer.PrependToPath(&pythonLayer, filepath.Join(pythonLayer.Path, "bin"))
-	layer.PrependToPath(&venvLayer, filepath.Join(venvLayer.Path, "bin"))
+	// Configure PATH for build and launch
+	if err := cnb.PrependToPath(pythonPath, filepath.Join(pythonPath, "bin")); err != nil {
+		return result, fmt.Errorf("configuring PATH: %w", err)
+	}
+	if err := cnb.PrependToPath(venvPath, filepath.Join(venvPath, "bin")); err != nil {
+		return result, fmt.Errorf("configuring PATH: %w", err)
+	}
 
 	// Copy model to layer
-	if err := copyModel(model, modelLayer.Path); err != nil {
+	if err := copyModel(model, modelPath); err != nil {
 		return result, fmt.Errorf("copying model: %w", err)
 	}
 
-	// Set MLServer environment variables
-	layer.SetPythonPath(&modelLayer, modelLayer.Path)
-	layer.SetLayerEnv(&modelLayer, "MLSERVER_MODEL_NAME", modelSource.Name)
-	layer.SetLayerEnv(&modelLayer, "MLSERVER_MODEL_URI", modelLayer.Path)
-	layer.SetLayerEnv(&modelLayer, "MLSERVER_MODEL_IMPLEMENTATION", mlserverExt.Runtime)
+	// Create model-settings.json for mlserver
+	// This is the recommended way to configure mlserver
+	modelSettings := map[string]interface{}{
+		"name":           modelSource.Name,
+		"implementation": mlserverExt.Runtime,
+		"parameters": map[string]interface{}{
+			"uri": modelPath,
+		},
+	}
+	if err := writeModelSettings(modelPath, modelSettings); err != nil {
+		return result, fmt.Errorf("writing model-settings.json: %w", err)
+	}
 
-	// Add layers to result
-	result.Layers = append(result.Layers, pythonLayer)
-	result.Layers = append(result.Layers, venvLayer)
-	result.Layers = append(result.Layers, modelLayer)
-
-	// Add default process to start MLServer
-	result.Processes = append(result.Processes, libcnb.Process{
+	// Add default process to start MLServer from venv
+	// Use the venv's mlserver to ensure Python version compatibility
+	result.Launch.Processes = append(result.Launch.Processes, cnb.ProcessEntry{
 		Type:    "web",
-		Command: []string{"mlserver", "start", modelLayer.Path},
+		Command: []string{filepath.Join(venvPath, "bin", "mlserver"), "start", modelPath},
 		Default: true,
 	})
 
@@ -134,13 +144,13 @@ type modelSource struct {
 	Version string // Model version or stage (for registry models)
 }
 
-func determineModelSource(ctx libcnb.BuildContext) (*modelSource, error) {
+func determineModelSource(ctx cnb.BuildContext) (*modelSource, error) {
 	// Check for local MLmodel file
-	mlmodelPath := filepath.Join(ctx.ApplicationPath, detect.MLmodelFile)
+	mlmodelPath := filepath.Join(ctx.AppDir, detect.MLmodelFile)
 	if _, err := os.Stat(mlmodelPath); err == nil {
 		return &modelSource{
 			Type: "local",
-			Path: ctx.ApplicationPath,
+			Path: ctx.AppDir,
 			Name: "model",
 		}, nil
 	}
@@ -158,7 +168,7 @@ func determineModelSource(ctx libcnb.BuildContext) (*modelSource, error) {
 	return nil, fmt.Errorf("no model source found: provide MLmodel file or set BP_MLFLOW_MODEL_NAME")
 }
 
-func getModel(ctx libcnb.BuildContext, source *modelSource) (*mlflow.Model, error) {
+func getModel(ctx cnb.BuildContext, source *modelSource) (*mlflow.Model, error) {
 	if source.Type == "local" {
 		return mlflow.NewLocalModel(source.Path), nil
 	}
@@ -233,26 +243,43 @@ func parseConda(model *mlflow.Model) (*conda.File, error) {
 	return conda.ParseFile(model.CondaPath())
 }
 
-// addMLServerExtension adds the MLServer extension to conda dependencies if not present.
-func addMLServerExtension(condaFile *conda.File, pipPackage string) {
-	// Check if already present in pip dependencies
-	for _, dep := range condaFile.PipDependencies() {
-		if dep == pipPackage || strings.HasPrefix(dep, pipPackage+"==") {
-			return
+// addMLServerDependencies adds MLServer core and extension to conda dependencies if not present.
+func addMLServerDependencies(condaFile *conda.File, extensionPackage string) {
+	pipDeps := condaFile.PipDependencies()
+
+	// Packages to add
+	packagesToAdd := []string{"mlserver", "mlserver-mlflow", extensionPackage}
+
+	// Filter out already present packages
+	var newPackages []string
+	for _, pkg := range packagesToAdd {
+		found := false
+		for _, dep := range pipDeps {
+			if dep == pkg || strings.HasPrefix(dep, pkg+"==") {
+				found = true
+				break
+			}
+		}
+		if !found {
+			newPackages = append(newPackages, pkg)
 		}
 	}
 
-	// Find pip block and add the extension
+	if len(newPackages) == 0 {
+		return
+	}
+
+	// Find pip block and add the packages
 	for i := range condaFile.Dependencies {
 		if condaFile.Dependencies[i].IsPipBlock() {
-			condaFile.Dependencies[i].Pip = append(condaFile.Dependencies[i].Pip, pipPackage)
+			condaFile.Dependencies[i].Pip = append(condaFile.Dependencies[i].Pip, newPackages...)
 			return
 		}
 	}
 
 	// No pip block found, add one
 	condaFile.Dependencies = append(condaFile.Dependencies, conda.Dependency{
-		Pip: []string{pipPackage},
+		Pip: newPackages,
 	})
 }
 
@@ -289,4 +316,16 @@ func copyModel(model *mlflow.Model, destPath string) error {
 	}
 
 	return nil
+}
+
+// writeModelSettings writes the model-settings.json file for mlserver.
+func writeModelSettings(modelPath string, settings map[string]interface{}) error {
+	settingsPath := filepath.Join(modelPath, "model-settings.json")
+
+	data, err := json.MarshalIndent(settings, "", "  ")
+	if err != nil {
+		return err
+	}
+
+	return os.WriteFile(settingsPath, data, 0644)
 }

@@ -1,10 +1,41 @@
 package main
 
 import (
+	"fmt"
+	"os"
+
+	"github.com/amazme/aipack/buildpack/internal/cnb"
 	"github.com/amazme/aipack/buildpack/internal/detect"
-	"github.com/buildpacks/libcnb/v2"
 )
 
 func main() {
-	libcnb.Detect(detect.Detect, libcnb.NewConfig())
+	// Build context from environment variables
+	ctx := cnb.DetectContext{
+		PlatformDir:   os.Getenv("CNB_PLATFORM_DIR"),
+		BuildPlanPath: os.Getenv("CNB_BUILD_PLAN_PATH"),
+		BuildpackDir:  os.Getenv("CNB_BUILDPACK_DIR"),
+		ExecEnv:       os.Getenv("CNB_EXEC_ENV"),
+	}
+
+	// Get app directory (current working directory)
+	wd, err := os.Getwd()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "ERROR: getting working directory: %v\n", err)
+		os.Exit(cnb.ExitCodeErr)
+	}
+	ctx.AppDir = wd
+
+	// Run detection
+	result, err := detect.Detect(ctx)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "ERROR: %v\n", err)
+		os.Exit(cnb.ExitCodeErr)
+	}
+
+	if !result.Pass {
+		// Standard "fail" exit code - not an error, just doesn't match
+		os.Exit(cnb.ExitCodeFail)
+	}
+
+	// Detection passed - exit 0
 }

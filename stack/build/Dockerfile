@@ -1,4 +1,5 @@
 # Build Image for MLflow Model Buildpack
+# Buildpack API 0.12 compatible
 FROM quay.io/fedora/fedora-minimal:43
 
 # Use Yandex mirror (Russia) - replace metalink with baseurl
@@ -14,28 +15,23 @@ RUN dnf install -y \
     shadow-utils \
     && dnf clean all
 
-# Install uv (fast Python package manager) to /usr/local/bin
+# Install uv (fast Python package manager)
 RUN dnf install -y uv && \
     dnf clean all
 
-# CNB user setup
-ENV CNB_USER_ID=1000
-ENV CNB_GROUP_ID=1000
-RUN groupadd -g ${CNB_GROUP_ID} cnb && \
-    useradd -u ${CNB_USER_ID} -g cnb -m -s /bin/bash cnb
+# CNB user setup (required for buildpack API 0.12)
+ARG cnb_uid=1000
+ARG cnb_gid=1000
+ENV CNB_USER_ID=${cnb_uid}
+ENV CNB_GROUP_ID=${cnb_gid}
 
-# CNB environment
-ENV CNB_STACK_ID="io.amazme.fedora-mlserver"
-ENV CNB_BUILDPACKS_DIR="/cnb/buildpacks"
-ENV CNB_LAYERS_DIR="/layers"
-ENV CNB_APP_DIR="/workspace"
+# Create user and group
+RUN groupadd cnb --gid ${CNB_GROUP_ID} && \
+    useradd --uid ${CNB_USER_ID} --gid ${CNB_GROUP_ID} -m -s /bin/bash cnb
 
-# Create CNB directories
-RUN mkdir -p ${CNB_BUILDPACKS_DIR} ${CNB_LAYERS_DIR} ${CNB_APP_DIR} && \
-    chown -R cnb:cnb /cnb /layers /workspace
+# Set required CNB target labels (API 0.12)
+LABEL io.buildpacks.base.distro.name="fedora"
+LABEL io.buildpacks.base.distro.version="43"
 
-# Set labels
-LABEL io.buildpacks.stack.id="io.amazme.fedora-mlserver"
-
-USER cnb
+USER ${CNB_USER_ID}:${CNB_GROUP_ID}
 WORKDIR /workspace

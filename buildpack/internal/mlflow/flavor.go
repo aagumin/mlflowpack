@@ -44,35 +44,35 @@ type MLServerExtension struct {
 var MLServerExtensions = map[string]MLServerExtension{
 	"sklearn": {
 		PipPackage: "mlserver-sklearn",
-		Runtime:    "mlserver_sklearn.SKLearnRuntime",
+		Runtime:    "mlserver_sklearn.SKLearnModel",
 	},
 	"xgboost": {
 		PipPackage: "mlserver-xgboost",
-		Runtime:    "mlserver_xgboost.XGBoostRuntime",
+		Runtime:    "mlserver_xgboost.XGBoostModel",
 	},
 	"lightgbm": {
 		PipPackage: "mlserver-lightgbm",
-		Runtime:    "mlserver_lightgbm.LightGBMRuntime",
+		Runtime:    "mlserver_lightgbm.LightGBMModel",
 	},
 	"tensorflow": {
 		PipPackage: "mlserver-tensorflow",
-		Runtime:    "mlserver_tensorflow.TensorFlowRuntime",
+		Runtime:    "mlserver_tensorflow.TensorFlowModel",
 	},
 	"pytorch": {
 		PipPackage: "mlserver-torchserve",
-		Runtime:    "mlserver_torchserve.TorchServeRuntime",
+		Runtime:    "mlserver_torchserve.TorchServeModel",
 	},
 	"transformers": {
 		PipPackage: "mlserver-huggingface",
-		Runtime:    "mlserver_huggingface.HuggingFaceRuntime",
+		Runtime:    "mlserver_huggingface.HuggingFaceModel",
 	},
 	"mlflow": {
 		PipPackage: "mlserver-mlflow",
-		Runtime:    "mlserver_mlflow.MLflowRuntime",
+		Runtime:    "mlserver_mlflow.MLflowModel",
 	},
 	"python_function": {
 		PipPackage: "mlserver-mlflow",
-		Runtime:    "mlserver_mlflow.MLflowRuntime",
+		Runtime:    "mlserver_mlflow.MLflowModel",
 	},
 }
 
