@@ -19,11 +19,16 @@ endif
 all: build
 
 build:
-	cd buildpack && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o bin/detect ./cmd/detect
-	cd buildpack && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o bin/build ./cmd/build
+	mkdir -p buildpack/bin/linux-amd64 buildpack/bin/linux-arm64
+	cd buildpack && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o bin/linux-amd64/detect ./cmd/detect
+	cd buildpack && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o bin/linux-amd64/build ./cmd/build
+	cd buildpack && CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -o bin/linux-arm64/detect ./cmd/detect
+	cd buildpack && CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -o bin/linux-arm64/build ./cmd/build
+	chmod +x buildpack/bin/detect buildpack/bin/build
 
 test:
-	cd buildpack && go test -v -race ./...
+	cd buildpack && GOCACHE=/tmp/aipack-go-cache go test -v ./...
+	cd buildpack && GOCACHE=/tmp/aipack-go-cache go test -v -race ./internal/...
 
 lint:
 	cd buildpack && golangci-lint run ./...
@@ -66,5 +71,6 @@ dev-train:
 
 
 clean:
-	rm -rf buildpack/bin/
+	rm -rf buildpack/bin/linux-amd64
+	rm -rf buildpack/bin/linux-arm64
 	rm -rf out/

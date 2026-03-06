@@ -17,4 +17,4 @@ os = "linux"
 arch = "arm64"
 
 [metadata]
-include-files = ["bin/detect", "bin/build"]
+include-files = ["bin/detect", "bin/build", "bin/linux-amd64", "bin/linux-arm64"]

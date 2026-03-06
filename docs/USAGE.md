@@ -19,7 +19,7 @@
 
 | Инструмент | Версия | Назначение |
 |------------|--------|------------|
-| pack | >= 0.30.0 | CLI для работы с buildpacks |
+| pack | >= 0.38.0 | CLI для работы с buildpacks |
 | Docker или Podman | любой | Container runtime |
 | Lima | любой | Docker на macOS (опционально) |
 
@@ -36,7 +36,7 @@ brew install pack
 sudo apt-get update && sudo apt-get install -y pack
 
 # Или скачать бинарник
-(curl -sSL "https://github.com/buildpacks/pack/releases/download/v0.37.0/pack-v0.37.0-linux-$(uname -m | sed 's/x86_64/amd64/').tgz" | sudo tar -C /usr/local/bin/ --no-same-owner -xz pack)
+(curl -sSL "https://github.com/buildpacks/pack/releases/download/v0.38.2/pack-v0.38.2-linux-$(uname -m | sed 's/x86_64/amd64/').tgz" | sudo tar -C /usr/local/bin/ --no-same-owner -xz pack)
 ```
 
 ### Lima на macOS (Опционально)
@@ -227,6 +227,7 @@ dependencies:
 ```
 
 Если `conda.yaml` отсутствует, используется Python 3.10 по умолчанию.
+Если рядом есть `requirements.txt`, buildpack дополнительно установит зависимости из него (fallback режим).
 
 ---
 

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -47,6 +48,9 @@ func Build(ctx cnb.BuildContext) (cnb.BuildResult, error) {
 	if err != nil {
 		return result, err
 	}
+	if modelSource.Type == "registry" && model.Path != "" {
+		defer os.RemoveAll(model.Path)
+	}
 
 	// Parse MLmodel file to detect flavor
 	if err := model.ParseMLmodel(); err != nil {
@@ -63,14 +67,10 @@ func Build(ctx cnb.BuildContext) (cnb.BuildResult, error) {
 	fmt.Printf("Detected model flavor: %s\n", flavor)
 	fmt.Printf("Required MLServer extension: %s\n", mlserverExt.PipPackage)
 
-	// Parse conda.yaml for dependencies
-	condaFile, err := parseConda(model)
+	dependencies, err := resolveDependencies(model, mlserverExt.PipPackage)
 	if err != nil {
 		return result, err
 	}
-
-	// Add MLServer core and extension to dependencies if not already present
-	addMLServerDependencies(condaFile, mlserverExt.PipPackage)
 
 	// Create Python layer
 	pythonPath, err := layer.SetupLayer(ctx.LayersDir, layer.PythonLayerName, layer.DefaultPythonLayerTypes())
@@ -95,8 +95,14 @@ func Build(ctx cnb.BuildContext) (cnb.BuildResult, error) {
 
 	// Install Python and dependencies using uv
 	installer := python.NewInstaller()
-	if err := installer.SetupFromConda(context.Background(), condaFile, pythonPath, venvPath); err != nil {
+	if err := installer.SetupFromConda(context.Background(), dependencies.conda, pythonPath, venvPath); err != nil {
 		return result, fmt.Errorf("setting up Python: %w", err)
+	}
+	if dependencies.requirementsPath != "" {
+		fmt.Printf("conda.yaml not found; installing dependencies from %s\n", filepath.Base(dependencies.requirementsPath))
+		if err := installer.InstallDepsFromFile(context.Background(), venvPath, dependencies.requirementsPath); err != nil {
+			return result, fmt.Errorf("installing dependencies from requirements.txt: %w", err)
+		}
 	}
 
 	// Configure PATH for build and launch
@@ -142,6 +148,11 @@ type modelSource struct {
 	Path    string // Local path (for local models)
 	Name    string // Model name (for registry models)
 	Version string // Model version or stage (for registry models)
+}
+
+type dependencySource struct {
+	conda            *conda.File
+	requirementsPath string
 }
 
 func determineModelSource(ctx cnb.BuildContext) (*modelSource, error) {
@@ -243,6 +254,24 @@ func parseConda(model *mlflow.Model) (*conda.File, error) {
 	return conda.ParseFile(model.CondaPath())
 }
 
+func resolveDependencies(model *mlflow.Model, extensionPackage string) (dependencySource, error) {
+	condaFile, err := parseConda(model)
+	if err != nil {
+		return dependencySource{}, err
+	}
+
+	addMLServerDependencies(condaFile, extensionPackage)
+
+	deps := dependencySource{
+		conda: condaFile,
+	}
+	if !model.HasConda() && model.HasRequirements() {
+		deps.requirementsPath = model.RequirementsPath()
+	}
+
+	return deps, nil
+}
+
 // addMLServerDependencies adds MLServer core and extension to conda dependencies if not present.
 func addMLServerDependencies(condaFile *conda.File, extensionPackage string) {
 	pipDeps := condaFile.PipDependencies()
@@ -306,16 +335,28 @@ func copyModel(model *mlflow.Model, destPath string) error {
 				return os.MkdirAll(dest, info.Mode())
 			}
 
-			data, err := os.ReadFile(path)
-			if err != nil {
-				return err
-			}
-
-			return os.WriteFile(dest, data, info.Mode())
+			return copyFile(path, dest, info.Mode())
 		})
 	}
 
 	return nil
+}
+
+func copyFile(src, dst string, mode os.FileMode) error {
+	input, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer input.Close()
+
+	output, err := os.OpenFile(dst, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, mode)
+	if err != nil {
+		return err
+	}
+	defer output.Close()
+
+	_, err = io.Copy(output, input)
+	return err
 }
 
 // writeModelSettings writes the model-settings.json file for mlserver.

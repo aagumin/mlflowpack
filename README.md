@@ -25,9 +25,9 @@ CNCF Buildpack для сборки container-образов с ML моделям
 
 ### Предварительные требования
 
-- [pack](https://buildpacks.io/docs/tools/pack/) >= 0.30.0
+- [pack](https://buildpacks.io/docs/tools/pack/) >= 0.38.0
 - Docker или Podman
-- Go >= 1.21 (для разработки)
+- Go >= 1.24 (для разработки)
 - Lima (на macOS)
 
 ### Установка

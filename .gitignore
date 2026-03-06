@@ -1,0 +1,59 @@
+.claude/
+# OS / editor
+.DS_Store
+*.swp
+*.swo
+*~
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Go
+*.test
+*.out
+*.prof
+*.pprof
+coverage.out
+cover.out
+profile.out
+
+# Go build/cache artifacts for this repo
+buildpack/.gocache/
+out/
+
+# Buildpack compiled binaries (keep launcher scripts in buildpack/bin/)
+buildpack/bin/linux-amd64/
+buildpack/bin/linux-arm64/
+
+# Generic binary artifacts
+*.exe
+*.dll
+*.so
+*.dylib
+*.a
+*.o
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.python-version
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.nox/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+/build/
+/dist/
+*.egg-info/
+pip-wheel-metadata/

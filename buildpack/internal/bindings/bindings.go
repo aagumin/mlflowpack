@@ -2,9 +2,11 @@
 package bindings
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 const (
@@ -89,7 +91,7 @@ func (r *Reader) ReadBindingByType(bindingType string) (*Binding, error) {
 
 		binding, err := r.ReadBinding(entry.Name())
 		if err != nil {
-			continue
+			return nil, fmt.Errorf("reading binding %s: %w", entry.Name(), err)
 		}
 
 		if binding.Type == bindingType {
@@ -143,9 +145,16 @@ func (r *Reader) ReadS3Binding() (*S3Binding, error) {
 	}
 
 	s3Path := filepath.Join(mlflowBinding.Path, "s3")
+	if _, err := os.Stat(s3Path); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("checking nested s3 binding: %w", err)
+	}
+
 	entries, err := r.readDirectory(s3Path)
 	if err != nil {
-		return nil, nil
+		return nil, fmt.Errorf("reading nested s3 binding: %w", err)
 	}
 
 	return &S3Binding{
@@ -175,7 +184,7 @@ func (r *Reader) readDirectory(path string) (map[string]string, error) {
 			return nil, fmt.Errorf("reading file %s: %w", filePath, err)
 		}
 
-		entries[file.Name()] = string(content)
+		entries[file.Name()] = strings.TrimRight(string(content), "\r\n")
 	}
 
 	return entries, nil
