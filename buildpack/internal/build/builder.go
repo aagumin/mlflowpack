@@ -17,7 +17,6 @@ import (
 	"github.com/aagumin/mlflowpack/internal/detect"
 	"github.com/aagumin/mlflowpack/internal/layer"
 	"github.com/aagumin/mlflowpack/internal/mlflow"
-	"github.com/aagumin/mlflowpack/internal/mlflow/storage"
 	"github.com/aagumin/mlflowpack/internal/python"
 )
 
@@ -210,61 +209,39 @@ func getModel(ctx cnb.BuildContext, source *modelSource) (*mlflow.Model, error) 
 		return mlflow.NewLocalModel(source.Path), nil
 	}
 
-	// Get bindings for registry model
+	// Get bindings with env vars fallback
 	bindingsDir := bindings.GetBindingsDir()
 	reader := bindings.NewReader(bindingsDir)
 
-	mlflowBinding, err := reader.ReadMLflowBinding()
+	// Check for MLflow binding (optional - env vars work without it)
+	mlflowBinding, err := reader.ReadMLflowBindingWithFallback()
 	if err != nil {
 		return nil, fmt.Errorf("reading MLflow binding: %w", err)
 	}
 	if mlflowBinding == nil {
-		return nil, fmt.Errorf("MLflow binding not found at %s", bindingsDir)
+		return nil, fmt.Errorf("MLflow credentials not found: provide bindings at %s or set MLFLOW_TRACKING_URI environment variable", bindingsDir)
 	}
 
-	// Create MLflow client
-	client := mlflow.NewClient(mlflowBinding.TrackingURI,
-		mlflow.WithCredentials(mlflowBinding.Username, mlflowBinding.Password))
-
-	// Resolve model version
-	modelVersion, err := client.ResolveModelVersion(context.Background(), source.Name, source.Version)
-	if err != nil {
-		return nil, fmt.Errorf("resolving model version: %w", err)
-	}
-
-	// Create temporary directory for download
+	// Create temp directory for download
 	tempDir, err := os.MkdirTemp("", "mlflow-model-")
 	if err != nil {
 		return nil, fmt.Errorf("creating temp directory: %w", err)
 	}
 
-	// Get S3 config from bindings
-	s3Binding, err := reader.ReadS3Binding()
+	// Use modctl-based downloader
+	downloader, err := mlflow.NewDownloader()
 	if err != nil {
-		return nil, fmt.Errorf("reading S3 binding: %w", err)
+		os.RemoveAll(tempDir)
+		return nil, fmt.Errorf("creating downloader: %w", err)
 	}
 
-	var s3Config storage.S3Config
-	if s3Binding != nil {
-		s3Config = storage.S3Config{
-			Endpoint:  s3Binding.Endpoint,
-			AccessKey: s3Binding.AccessKey,
-			SecretKey: s3Binding.SecretKey,
-			Region:    s3Binding.Region,
-		}
-	}
-
-	// Download model artifacts
-	backend, err := storage.DefaultBackends(context.Background(), s3Config)
+	downloadPath, err := downloader.DownloadModel(context.Background(), source.Name, source.Version, tempDir)
 	if err != nil {
-		return nil, fmt.Errorf("creating storage backend: %w", err)
-	}
-
-	if err := backend.Download(context.Background(), modelVersion.ArtifactURI, tempDir); err != nil {
+		os.RemoveAll(tempDir)
 		return nil, fmt.Errorf("downloading model: %w", err)
 	}
 
-	return mlflow.NewRegistryModel(tempDir, source.Name, modelVersion.Version), nil
+	return mlflow.NewRegistryModel(downloadPath, source.Name, source.Version), nil
 }
 
 func parseConda(model *mlflow.Model) (*conda.File, error) {
