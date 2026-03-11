@@ -102,9 +102,9 @@ make e2e       # Build+runtime проверки e2e моделей
 | `BP_MLFLOW_MODEL_NAME` | Имя модели в Registry | — |
 | `BP_MLFLOW_MODEL_VERSION` | Версия модели | `latest` |
 | `BP_MLFLOW_MODEL_STAGE` | Stage модели (Production, Staging) | — |
-| `BP_MLFLOW_MODEL_PATH` | Локальный путь к модели ИЛИ `models://<name>[/<version-or-stage>]` для Registry | auto-detect |
+| `BP_MLFLOW_MODEL_PATH` | Локальный путь к модели ИЛИ `models:/<name>[/<version-or-stage>]` для Registry | auto-detect |
 
-Если `BP_MLFLOW_MODEL_PATH` начинается с `models://`, buildpack скачивает модель из Registry.  
+Если `BP_MLFLOW_MODEL_PATH` начинается с `models:/`, buildpack скачивает модель из Registry.  
 Иначе локальная модель определяется автоматически по `MLmodel` (корень или рекурсивный поиск).  
 Если найдено несколько `MLmodel`, укажите `BP_MLFLOW_MODEL_PATH`.
 
@@ -120,6 +120,25 @@ make e2e       # Build+runtime проверки e2e моделей
     ├── endpoint
     ├── access_key
     └── secret_key
+```
+
+### Environment Variables (альтернатива bindings)
+
+```bash
+# MLflow Registry
+export MLFLOW_TRACKING_URI="https://mlflow.example.com"
+export MLFLOW_TRACKING_USERNAME="your-username"
+export MLFLOW_TRACKING_PASSWORD="your-password"
+
+# S3 (для артефактов)
+export AWS_ACCESS_KEY_ID="your-access-key"
+export AWS_SECRET_ACCESS_KEY="your-secret-key"
+export AWS_REGION="us-east-1"
+
+# Сборка
+pack build my-model \
+  --builder aagumin/mlserver-builder:0.1.0 \
+  --env BP_MLFLOW_MODEL_PATH="models:/my-classifier/Production"
 ```
 
 ## Документация

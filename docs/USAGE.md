@@ -196,7 +196,7 @@ export BP_MLFLOW_MODEL_VERSION="3"  # или "latest"
 export BP_MLFLOW_MODEL_STAGE="Production"
 
 # Альтернатива через единый URI:
-export BP_MLFLOW_MODEL_PATH="models://my-classifier/Production"
+export BP_MLFLOW_MODEL_PATH="models:/my-classifier/Production"
 ```
 
 ### Полная команда сборки
@@ -220,6 +220,40 @@ pack build my-registry-model \
   --volume $(pwd)/bindings:/bindings/mlflow
 ```
 
+### Настройка через Environment Variables (для локальной разработки)
+
+Вместо bindings можно использовать environment variables:
+
+```bash
+# MLflow Registry
+export MLFLOW_TRACKING_URI="https://mlflow.your-company.com"
+export MLFLOW_TRACKING_USERNAME="your-username"
+export MLFLOW_TRACKING_PASSWORD="your-password"
+
+# S3 (для артефактов)
+export AWS_ACCESS_KEY_ID="your-access-key"
+export AWS_SECRET_ACCESS_KEY="your-secret-key"
+export AWS_REGION="us-east-1"
+export AWS_ENDPOINT_URL="https://s3.your-company.com"  # опционально
+
+# Сборка
+pack build my-registry-model \
+  --builder aagumin/mlserver-builder:0.1.0 \
+  --env BP_MLFLOW_MODEL_PATH="models:/my-classifier/1"
+```
+
+### Переменные окружения для Registry
+
+| Переменная | Описание |
+|------------|----------|
+| `MLFLOW_TRACKING_URI` | URL MLflow сервера (или DATABRICKS_HOST) |
+| `MLFLOW_TRACKING_USERNAME` | Basic auth username |
+| `MLFLOW_TRACKING_PASSWORD` | Basic auth password |
+| `AWS_ACCESS_KEY_ID` | S3 access key |
+| `AWS_SECRET_ACCESS_KEY` | S3 secret key |
+| `AWS_REGION` | AWS region |
+| `AWS_ENDPOINT_URL` | Custom S3 endpoint (MinIO, etc.) |
+
 ---
 
 ## Конфигурация
@@ -231,12 +265,12 @@ pack build my-registry-model \
 | `BP_MLFLOW_MODEL_NAME` | Да* | Имя зарегистрированной модели |
 | `BP_MLFLOW_MODEL_VERSION` | Нет | Версия модели (по умолчанию `latest`) |
 | `BP_MLFLOW_MODEL_STAGE` | Нет | Stage модели: `Production`, `Staging`, `Archived` |
-| `BP_MLFLOW_MODEL_PATH` | Нет | Локальный путь к модели ИЛИ `models://<name>[/<version-or-stage>]` для Model Registry |
+| `BP_MLFLOW_MODEL_PATH` | Нет | Локальный путь к модели ИЛИ `models:/<name>[/<version-or-stage>]` для Model Registry |
 
 *\* Обязательно только при сборке из registry. При локальной модели определяется автоматически.*
 
 Локальная модель теперь определяется так:
-- если `BP_MLFLOW_MODEL_PATH` начинается с `models://`, buildpack использует Model Registry (локальная файловая система не сканируется),
+- если `BP_MLFLOW_MODEL_PATH` начинается с `models:/`, buildpack использует Model Registry (локальная файловая система не сканируется),
 - иначе сначала `BP_MLFLOW_MODEL_PATH` (если задан),
 - затем `MLmodel` в корне `--path`,
 - затем рекурсивный поиск единственного `MLmodel` под `--path`.
