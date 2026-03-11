@@ -8,6 +8,7 @@ import (
 	"strings"
 )
 
+// Local model detection constants and errors.
 var (
 	// ErrLocalModelNotFound means no local MLmodel file exists in app dir.
 	ErrLocalModelNotFound = errors.New("local MLmodel file not found")
@@ -75,7 +76,8 @@ func modelDirFromEnv(appDir string) (string, bool, error) {
 	modelDir = filepath.Clean(modelDir)
 
 	mlmodelPath := filepath.Join(modelDir, MLmodelFile)
-	info, err := os.Stat(mlmodelPath)
+	// #nosec G304 G703 -- Path is user-provided via env var for intentional directory traversal
+	info, err := os.Stat(mlmodelPath) // #nosec G304 G703
 	if err == nil && !info.IsDir() {
 		return modelDir, true, nil
 	}

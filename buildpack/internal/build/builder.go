@@ -231,13 +231,17 @@ func getModel(ctx cnb.BuildContext, source *modelSource) (*mlflow.Model, error) 
 	// Use modctl-based downloader
 	downloader, err := mlflow.NewDownloader()
 	if err != nil {
-		os.RemoveAll(tempDir)
+		if removeErr := os.RemoveAll(tempDir); removeErr != nil {
+			return nil, errors.Join(fmt.Errorf("creating downloader: %w", err), fmt.Errorf("cleanup temp dir: %w", removeErr))
+		}
 		return nil, fmt.Errorf("creating downloader: %w", err)
 	}
 
 	downloadPath, err := downloader.DownloadModel(context.Background(), source.Name, source.Version, tempDir)
 	if err != nil {
-		os.RemoveAll(tempDir)
+		if removeErr := os.RemoveAll(tempDir); removeErr != nil {
+			return nil, errors.Join(fmt.Errorf("downloading model: %w", err), fmt.Errorf("cleanup temp dir: %w", removeErr))
+		}
 		return nil, fmt.Errorf("downloading model: %w", err)
 	}
 
