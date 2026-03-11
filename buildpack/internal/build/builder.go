@@ -161,7 +161,7 @@ type dependencySource struct {
 }
 
 func determineModelSource(ctx cnb.BuildContext) (*modelSource, error) {
-	// models://... in BP_MLFLOW_MODEL_PATH explicitly selects registry source.
+	// models:/... in BP_MLFLOW_MODEL_PATH explicitly selects registry source.
 	if name, version, ok, err := detect.DetectFromModelPathEnv(); err != nil {
 		return nil, err
 	} else if ok {

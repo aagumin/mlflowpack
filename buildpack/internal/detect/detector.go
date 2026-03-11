@@ -18,7 +18,8 @@ const (
 	EnvModelPath = "BP_MLFLOW_MODEL_PATH"
 
 	// ModelRegistryPrefix marks BP_MLFLOW_MODEL_PATH as a registry model URI.
-	ModelRegistryPrefix = "models://"
+	// Changed from "models://" to "models:/" for modctl compatibility.
+	ModelRegistryPrefix = "models:/"
 )
 
 // Detect checks if an MLmodel file exists in the application directory.
@@ -73,8 +74,8 @@ func DetectFromEnv() (modelName, modelVersion string, ok bool, err error) {
 // DetectFromModelPathEnv detects a registry model reference from BP_MLFLOW_MODEL_PATH.
 // Supported format:
 //
-//	models://<model-name>
-//	models://<model-name>/<version-or-stage>
+//	models:/<model-name>
+//	models:/<model-name>/<version-or-stage>
 func DetectFromModelPathEnv() (modelName, modelVersion string, ok bool, err error) {
 	raw := strings.TrimSpace(os.Getenv(EnvModelPath))
 	if raw == "" {

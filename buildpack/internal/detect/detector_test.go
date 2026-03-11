@@ -135,7 +135,7 @@ func TestDetect(t *testing.T) {
 		appDir := t.TempDir()
 		writeMLmodelFile(t, filepath.Join(appDir, "models", "first"))
 		writeMLmodelFile(t, filepath.Join(appDir, "models", "second"))
-		t.Setenv(EnvModelPath, "models://wine-classifier/7")
+		t.Setenv(EnvModelPath, "models:/wine-classifier/7")
 
 		res, err := Detect(cnb.DetectContext{AppDir: appDir})
 		if err != nil {
@@ -149,7 +149,7 @@ func TestDetect(t *testing.T) {
 
 func TestDetectFromModelPathEnv(t *testing.T) {
 	t.Run("parses models uri with version", func(t *testing.T) {
-		t.Setenv(EnvModelPath, "models://wine-model/12")
+		t.Setenv(EnvModelPath, "models:/wine-model/12")
 
 		name, version, ok, err := DetectFromModelPathEnv()
 		if err != nil {
@@ -167,7 +167,7 @@ func TestDetectFromModelPathEnv(t *testing.T) {
 	})
 
 	t.Run("parses models uri without version as latest", func(t *testing.T) {
-		t.Setenv(EnvModelPath, "models://wine-model")
+		t.Setenv(EnvModelPath, "models:/wine-model")
 
 		name, version, ok, err := DetectFromModelPathEnv()
 		if err != nil {
@@ -197,7 +197,7 @@ func TestDetectFromModelPathEnv(t *testing.T) {
 	})
 
 	t.Run("errors on malformed models uri", func(t *testing.T) {
-		t.Setenv(EnvModelPath, "models://")
+		t.Setenv(EnvModelPath, "models:/")
 
 		_, _, _, err := DetectFromModelPathEnv()
 		if err == nil {
@@ -214,5 +214,61 @@ func writeMLmodelFile(t *testing.T, dir string) {
 	path := filepath.Join(dir, MLmodelFile)
 	if err := os.WriteFile(path, []byte("flavors:\n  sklearn: {}\n"), 0o644); err != nil {
 		t.Fatalf("write %s: %v", path, err)
+	}
+}
+
+func TestDetectFromModelPathEnv_SingleSlash(t *testing.T) {
+	tests := []struct {
+		name        string
+		envValue    string
+		wantName    string
+		wantVersion string
+		wantOK      bool
+		wantErr     bool
+	}{
+		{
+			name:        "models:/ with version",
+			envValue:    "models:/my-model/1",
+			wantName:    "my-model",
+			wantVersion: "1",
+			wantOK:      true,
+		},
+		{
+			name:        "models:/ without version (defaults to latest)",
+			envValue:    "models:/my-model",
+			wantName:    "my-model",
+			wantVersion: "latest",
+			wantOK:      true,
+		},
+		{
+			name:     "empty string",
+			envValue: "",
+			wantOK:   false,
+		},
+		{
+			name:     "local path not affected",
+			envValue: "/path/to/model",
+			wantOK:   false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv(EnvModelPath, tt.envValue)
+			gotName, gotVersion, gotOK, err := DetectFromModelPathEnv()
+			if (err != nil) != tt.wantErr {
+				t.Errorf("DetectFromModelPathEnv() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if gotOK != tt.wantOK {
+				t.Errorf("DetectFromModelPathEnv() ok = %v, want %v", gotOK, tt.wantOK)
+				return
+			}
+			if gotName != tt.wantName {
+				t.Errorf("DetectFromModelPathEnv() name = %v, want %v", gotName, tt.wantName)
+			}
+			if gotVersion != tt.wantVersion {
+				t.Errorf("DetectFromModelPathEnv() version = %v, want %v", gotVersion, tt.wantVersion)
+			}
+		})
 	}
 }

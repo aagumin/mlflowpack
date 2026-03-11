@@ -84,7 +84,7 @@ func TestDetermineModelSource_PrefersModelsURIOverLocalFiles(t *testing.T) {
 	appDir := t.TempDir()
 	writeMLmodelFile(t, filepath.Join(appDir, "models", "first"))
 	writeMLmodelFile(t, filepath.Join(appDir, "models", "second"))
-	t.Setenv(detect.EnvModelPath, "models://wine-model/42")
+	t.Setenv(detect.EnvModelPath, "models:/wine-model/42")
 
 	source, err := determineModelSource(cnb.BuildContext{AppDir: appDir})
 	if err != nil {

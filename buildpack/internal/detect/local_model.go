@@ -25,7 +25,7 @@ func FindLocalModelDir(appDir string) (string, error) {
 	if _, _, ok, err := DetectFromModelPathEnv(); err != nil {
 		return "", err
 	} else if ok {
-		// models://... explicitly switches to registry mode, so local source is absent.
+		// models:/... explicitly switches to registry mode, so local source is absent.
 		return "", ErrLocalModelNotFound
 	}
 
