@@ -8,12 +8,12 @@ uri = "buildpack/"
 
 [[order]]
 [[order.group]]
-id = "io.amazme.buildpacks.mlflow-model"
+id = "io.github.aagumin.mlflow-model"
 
 # Build image - used during build phase
 [build]
-image = "amazme/fedora-mlserver-build:43"
+image = "aagumin/fedora-mlserver-build:43"
 
 # Run images - used during run phase
 [[run.images]]
-image = "amazme/fedora-mlserver-run:43"
+image = "aagumin/fedora-mlserver-run:43"

@@ -39,7 +39,7 @@ type LayerMetadata struct {
 // Buildpacks write ProcessEntry; the launcher converts to launch.Process at runtime.
 type ProcessEntry struct {
 	Type             string   `toml:"type"`
-	Command          []string `toml:"command"`              // API 0.9+: array of strings
+	Command          []string `toml:"command"` // API 0.9+: array of strings
 	Args             []string `toml:"args,omitempty"`
 	Default          bool     `toml:"default,omitempty"`
 	WorkingDirectory string   `toml:"working-dir,omitempty"`

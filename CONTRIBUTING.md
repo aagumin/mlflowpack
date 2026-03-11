@@ -78,8 +78,8 @@ brew install go pack
 ### Клонирование и сборка
 
 ```bash
-git clone https://github.com/amazme/aipack.git
-cd aipack
+git clone https://github.com/aagumin/mlflowpack.git
+cd mlflowpack
 
 # Установить Go зависимости
 cd buildpack && go mod download
@@ -137,7 +137,7 @@ make builder
 ```bash
 # Сборка тестового образа
 lima pack build test-mlflow-model \
-  --builder amazme/mlserver-builder:<version> \
+  --builder aagumin/mlserver-builder:<version> \
   --path test-model \
   --pull-policy never \
   --docker-host=inherit \
@@ -176,7 +176,7 @@ curl -X POST http://localhost:8080/v2/models/model/infer \
 
 ```bash
 pack build my-model \
-  --builder amazme/mlserver-builder:0.1.0 \
+  --builder aagumin/mlserver-builder:0.1.0 \
   --path test-model \
   --env CNB_LOG_LEVEL=debug
 ```

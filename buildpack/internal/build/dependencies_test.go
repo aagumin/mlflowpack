@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/amazme/aipack/buildpack/internal/mlflow"
+	"github.com/aagumin/mlflowpack/internal/mlflow"
 )
 
 func TestResolveDependencies_FallbackToRequirementsWhenNoConda(t *testing.T) {
@@ -13,7 +13,7 @@ func TestResolveDependencies_FallbackToRequirementsWhenNoConda(t *testing.T) {
 
 	dir := t.TempDir()
 	requirementsPath := filepath.Join(dir, mlflow.RequirementsFile)
-	if err := os.WriteFile(requirementsPath, []byte("pandas==2.2.0\n"), 0644); err != nil {
+	if err := os.WriteFile(requirementsPath, []byte("pandas==2.2.0\n"), 0o644); err != nil {
 		t.Fatalf("write requirements.txt: %v", err)
 	}
 
@@ -42,12 +42,12 @@ func TestResolveDependencies_CondaTakesPrecedenceOverRequirements(t *testing.T) 
 	dir := t.TempDir()
 	condaPath := filepath.Join(dir, mlflow.CondaFile)
 	condaYAML := []byte("dependencies:\n  - python=3.11\n  - pip:\n    - numpy==2.0.0\n")
-	if err := os.WriteFile(condaPath, condaYAML, 0644); err != nil {
+	if err := os.WriteFile(condaPath, condaYAML, 0o644); err != nil {
 		t.Fatalf("write conda.yaml: %v", err)
 	}
 
 	requirementsPath := filepath.Join(dir, mlflow.RequirementsFile)
-	if err := os.WriteFile(requirementsPath, []byte("pandas==2.2.0\n"), 0644); err != nil {
+	if err := os.WriteFile(requirementsPath, []byte("pandas==2.2.0\n"), 0o644); err != nil {
 		t.Fatalf("write requirements.txt: %v", err)
 	}
 
@@ -79,7 +79,7 @@ func TestResolveDependencies_ErrorsOnInvalidConda(t *testing.T) {
 
 	dir := t.TempDir()
 	condaPath := filepath.Join(dir, mlflow.CondaFile)
-	if err := os.WriteFile(condaPath, []byte("dependencies: ["), 0644); err != nil {
+	if err := os.WriteFile(condaPath, []byte("dependencies: ["), 0o644); err != nil {
 		t.Fatalf("write invalid conda.yaml: %v", err)
 	}
 

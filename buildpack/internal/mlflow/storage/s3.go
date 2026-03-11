@@ -3,6 +3,7 @@ package storage
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/url"
@@ -75,7 +76,7 @@ func (b *S3Backend) Download(ctx context.Context, uri, destDir string) error {
 	}
 
 	// Ensure destination exists
-	if err := os.MkdirAll(destDir, 0755); err != nil {
+	if err := os.MkdirAll(destDir, 0o755); err != nil {
 		return fmt.Errorf("creating destination directory: %w", err)
 	}
 
@@ -113,10 +114,13 @@ func (b *S3Backend) downloadObject(ctx context.Context, bucket, key, prefix, des
 		return nil // Skip the prefix itself
 	}
 
-	destPath := filepath.Join(destDir, relPath)
+	destPath, err := secureJoin(destDir, relPath)
+	if err != nil {
+		return err
+	}
 
 	// Create parent directories
-	if err := os.MkdirAll(filepath.Dir(destPath), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(destPath), 0o755); err != nil {
 		return fmt.Errorf("creating directories: %w", err)
 	}
 
@@ -130,13 +134,21 @@ func (b *S3Backend) downloadObject(ctx context.Context, bucket, key, prefix, des
 	if err != nil {
 		return fmt.Errorf("downloading %s: %w", key, err)
 	}
-	defer output.Body.Close()
+	defer func() {
+		if closeErr := output.Body.Close(); closeErr != nil {
+			err = errors.Join(err, fmt.Errorf("closing S3 object body %q: %w", key, closeErr))
+		}
+	}()
 
 	file, err := os.Create(destPath)
 	if err != nil {
 		return fmt.Errorf("creating file %s: %w", destPath, err)
 	}
-	defer file.Close()
+	defer func() {
+		if closeErr := file.Close(); closeErr != nil {
+			err = errors.Join(err, fmt.Errorf("closing file %q: %w", destPath, closeErr))
+		}
+	}()
 
 	if _, err := io.Copy(file, output.Body); err != nil {
 		return fmt.Errorf("writing file %s: %w", destPath, err)
@@ -183,7 +195,7 @@ func (b *FileBackend) Download(ctx context.Context, uri, destDir string) error {
 	}
 
 	// Ensure destination exists
-	if err := os.MkdirAll(destDir, 0755); err != nil {
+	if err := os.MkdirAll(destDir, 0o755); err != nil {
 		return fmt.Errorf("creating destination directory: %w", err)
 	}
 
@@ -198,7 +210,10 @@ func (b *FileBackend) Download(ctx context.Context, uri, destDir string) error {
 			return err
 		}
 
-		destPath := filepath.Join(destDir, relPath)
+		destPath, err := secureJoin(destDir, relPath)
+		if err != nil {
+			return err
+		}
 
 		if info.IsDir() {
 			return os.MkdirAll(destPath, info.Mode())
@@ -208,26 +223,61 @@ func (b *FileBackend) Download(ctx context.Context, uri, destDir string) error {
 	})
 }
 
-func copyFile(src, dst string) error {
+func copyFile(src, dst string) (err error) {
 	srcFile, err := os.Open(src)
 	if err != nil {
 		return err
 	}
-	defer srcFile.Close()
+	defer func() {
+		if closeErr := srcFile.Close(); closeErr != nil {
+			err = errors.Join(err, fmt.Errorf("closing source file %q: %w", src, closeErr))
+		}
+	}()
 
 	srcInfo, err := srcFile.Stat()
 	if err != nil {
 		return err
 	}
 
+	// #nosec G703 -- dst is validated by secureJoin before passing to copyFile.
 	dstFile, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, srcInfo.Mode())
 	if err != nil {
 		return err
 	}
-	defer dstFile.Close()
+	defer func() {
+		if closeErr := dstFile.Close(); closeErr != nil {
+			err = errors.Join(err, fmt.Errorf("closing destination file %q: %w", dst, closeErr))
+		}
+	}()
 
-	_, err = io.Copy(dstFile, srcFile)
-	return err
+	if _, err := io.Copy(dstFile, srcFile); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func secureJoin(baseDir, relPath string) (string, error) {
+	cleanRelPath := filepath.Clean(relPath)
+	if cleanRelPath == "." {
+		return filepath.Clean(baseDir), nil
+	}
+	if filepath.IsAbs(cleanRelPath) {
+		return "", fmt.Errorf("absolute path %q is not allowed", relPath)
+	}
+
+	baseDir = filepath.Clean(baseDir)
+	destPath := filepath.Join(baseDir, cleanRelPath)
+
+	relativeToBase, err := filepath.Rel(baseDir, destPath)
+	if err != nil {
+		return "", fmt.Errorf("building destination path: %w", err)
+	}
+	if relativeToBase == ".." || strings.HasPrefix(relativeToBase, ".."+string(os.PathSeparator)) {
+		return "", fmt.Errorf("path traversal detected for %q", relPath)
+	}
+
+	return destPath, nil
 }
 
 // MultiBackend supports multiple storage backends.

@@ -4,6 +4,7 @@ package mlflow
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -15,6 +16,8 @@ import (
 const (
 	// DefaultTimeout is the default HTTP timeout.
 	DefaultTimeout = 30 * time.Minute
+
+	getModelVersionEndpoint = "/api/2.0/mlflow/registered-models/get-version"
 )
 
 // ModelVersion represents a version of a registered model.
@@ -85,8 +88,8 @@ func NewClient(trackingURI string, opts ...ClientOption) *Client {
 }
 
 // GetModelVersion retrieves a specific version of a model.
-func (c *Client) GetModelVersion(ctx context.Context, name, version string) (*ModelVersion, error) {
-	endpoint := fmt.Sprintf("/api/2.0/mlflow/registered-models/get-version")
+func (c *Client) GetModelVersion(ctx context.Context, name, version string) (modelVersion *ModelVersion, err error) {
+	endpoint := getModelVersionEndpoint
 	params := url.Values{}
 	params.Set("name", name)
 	params.Set("version", version)
@@ -95,7 +98,7 @@ func (c *Client) GetModelVersion(ctx context.Context, name, version string) (*Mo
 	if err != nil {
 		return nil, fmt.Errorf("getting model version: %w", err)
 	}
-	defer resp.Body.Close()
+	defer closeBody(&err, resp.Body, "model version response")
 
 	var result modelVersionResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
@@ -106,7 +109,7 @@ func (c *Client) GetModelVersion(ctx context.Context, name, version string) (*Mo
 }
 
 // GetLatestModelVersion retrieves the latest version of a model.
-func (c *Client) GetLatestModelVersion(ctx context.Context, name string) (*ModelVersion, error) {
+func (c *Client) GetLatestModelVersion(ctx context.Context, name string) (modelVersion *ModelVersion, err error) {
 	endpoint := "/api/2.0/mlflow/registered-models/search-versions"
 	params := url.Values{}
 	params.Set("filter", fmt.Sprintf("name='%s'", name))
@@ -115,7 +118,7 @@ func (c *Client) GetLatestModelVersion(ctx context.Context, name string) (*Model
 	if err != nil {
 		return nil, fmt.Errorf("searching model versions: %w", err)
 	}
-	defer resp.Body.Close()
+	defer closeBody(&err, resp.Body, "latest model version response")
 
 	var result searchModelVersionsResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
@@ -131,7 +134,7 @@ func (c *Client) GetLatestModelVersion(ctx context.Context, name string) (*Model
 }
 
 // GetModelVersionByStage retrieves a model version by stage.
-func (c *Client) GetModelVersionByStage(ctx context.Context, name, stage string) (*ModelVersion, error) {
+func (c *Client) GetModelVersionByStage(ctx context.Context, name, stage string) (modelVersion *ModelVersion, err error) {
 	endpoint := "/api/2.0/mlflow/registered-models/search-versions"
 	params := url.Values{}
 	params.Set("filter", fmt.Sprintf("name='%s' AND current_stage='%s'", name, stage))
@@ -140,7 +143,7 @@ func (c *Client) GetModelVersionByStage(ctx context.Context, name, stage string)
 	if err != nil {
 		return nil, fmt.Errorf("searching model versions by stage: %w", err)
 	}
-	defer resp.Body.Close()
+	defer closeBody(&err, resp.Body, "model version by stage response")
 
 	var result searchModelVersionsResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
@@ -174,8 +177,18 @@ func (c *Client) doRequest(ctx context.Context, method, endpoint string, params 
 	if err != nil {
 		return nil, fmt.Errorf("parsing tracking URI: %w", err)
 	}
+	if err := validateTrackingURL(baseURL); err != nil {
+		return nil, err
+	}
 
 	reqURL := baseURL.ResolveReference(&url.URL{Path: endpoint})
+	if reqURL.Host != baseURL.Host {
+		return nil, fmt.Errorf("resolved request host %q differs from tracking host %q", reqURL.Host, baseURL.Host)
+	}
+	if err := validateTrackingURL(reqURL); err != nil {
+		return nil, err
+	}
+
 	if params != nil {
 		reqURL.RawQuery = params.Encode()
 	}
@@ -189,18 +202,47 @@ func (c *Client) doRequest(ctx context.Context, method, endpoint string, params 
 		req.SetBasicAuth(c.username, c.password)
 	}
 
+	// #nosec G704 -- URL is validated by validateTrackingURL and constrained to tracking host.
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("executing request: %w", err)
 	}
 
 	if resp.StatusCode >= 400 {
-		bodyBytes, _ := io.ReadAll(resp.Body)
-		resp.Body.Close()
+		bodyBytes, readErr := io.ReadAll(resp.Body)
+		closeErr := resp.Body.Close()
+		if readErr != nil {
+			return nil, fmt.Errorf("reading API error body: %w", errors.Join(readErr, closeErr))
+		}
+		if closeErr != nil {
+			return nil, fmt.Errorf("closing API error body: %w", closeErr)
+		}
 		return nil, fmt.Errorf("API error: %s - %s", resp.Status, string(bodyBytes))
 	}
 
 	return resp, nil
+}
+
+func closeBody(errp *error, body io.Closer, resource string) {
+	if body == nil {
+		return
+	}
+	if closeErr := body.Close(); closeErr != nil {
+		*errp = errors.Join(*errp, fmt.Errorf("closing %s: %w", resource, closeErr))
+	}
+}
+
+func validateTrackingURL(u *url.URL) error {
+	if u == nil {
+		return fmt.Errorf("tracking URI is nil")
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return fmt.Errorf("tracking URI must use http or https scheme")
+	}
+	if u.Hostname() == "" {
+		return fmt.Errorf("tracking URI must include host")
+	}
+	return nil
 }
 
 func isNumericVersion(s string) bool {

@@ -11,9 +11,9 @@ type EnvironmentAction int
 
 const (
 	ActionOverride EnvironmentAction = iota // VAR.override - replace value
-	ActionPrepend                            // VAR.prepend - prepend to value
-	ActionAppend                             // VAR.append - append to value
-	ActionDefault                            // VAR.default - set if not already set
+	ActionPrepend                           // VAR.prepend - prepend to value
+	ActionAppend                            // VAR.append - append to value
+	ActionDefault                           // VAR.default - set if not already set
 )
 
 // WriteEnvFile writes an environment variable file to a layer's env directory.
@@ -36,7 +36,7 @@ func WriteEnvBuildFile(layerPath, name, value string, action EnvironmentAction) 
 
 func writeEnvFile(layerPath, envDir, name, value string, action EnvironmentAction) error {
 	dir := filepath.Join(layerPath, envDir)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
 
@@ -52,7 +52,7 @@ func writeEnvFile(layerPath, envDir, name, value string, action EnvironmentActio
 		filename = name + ".default"
 	}
 
-	return os.WriteFile(filepath.Join(dir, filename), []byte(value), 0644)
+	return os.WriteFile(filepath.Join(dir, filename), []byte(value), 0o644)
 }
 
 // PrependToPath prepends a path to PATH environment variable for build and launch.

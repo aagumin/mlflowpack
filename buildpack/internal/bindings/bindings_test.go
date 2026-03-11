@@ -11,7 +11,7 @@ func TestReadMLflowBinding_TrimsLineEndings(t *testing.T) {
 
 	dir := t.TempDir()
 	mlflowDir := filepath.Join(dir, "mlflow-main")
-	if err := os.MkdirAll(mlflowDir, 0755); err != nil {
+	if err := os.MkdirAll(mlflowDir, 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
 
@@ -46,7 +46,7 @@ func TestReadBindingByType_ReturnsErrorOnBrokenBinding(t *testing.T) {
 	dir := t.TempDir()
 
 	brokenDir := filepath.Join(dir, "a-broken")
-	if err := os.MkdirAll(brokenDir, 0755); err != nil {
+	if err := os.MkdirAll(brokenDir, 0o755); err != nil {
 		t.Fatalf("mkdir broken dir: %v", err)
 	}
 	if err := os.Symlink(filepath.Join(brokenDir, "missing"), filepath.Join(brokenDir, "type")); err != nil {
@@ -54,7 +54,7 @@ func TestReadBindingByType_ReturnsErrorOnBrokenBinding(t *testing.T) {
 	}
 
 	validDir := filepath.Join(dir, "z-valid")
-	if err := os.MkdirAll(validDir, 0755); err != nil {
+	if err := os.MkdirAll(validDir, 0o755); err != nil {
 		t.Fatalf("mkdir valid dir: %v", err)
 	}
 	writeBindingFile(t, validDir, "type", "mlflow")
@@ -72,7 +72,7 @@ func TestReadS3Binding_ReturnsErrorOnBrokenNestedBinding(t *testing.T) {
 	dir := t.TempDir()
 	mlflowDir := filepath.Join(dir, "mlflow")
 	s3Dir := filepath.Join(mlflowDir, "s3")
-	if err := os.MkdirAll(s3Dir, 0755); err != nil {
+	if err := os.MkdirAll(s3Dir, 0o755); err != nil {
 		t.Fatalf("mkdir s3 dir: %v", err)
 	}
 
@@ -90,7 +90,7 @@ func TestReadS3Binding_ReturnsErrorOnBrokenNestedBinding(t *testing.T) {
 
 func writeBindingFile(t *testing.T, dir, name, content string) {
 	t.Helper()
-	if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644); err != nil {
 		t.Fatalf("write %s: %v", name, err)
 	}
 }

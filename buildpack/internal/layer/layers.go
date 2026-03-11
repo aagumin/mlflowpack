@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/amazme/aipack/buildpack/internal/cnb"
+	"github.com/aagumin/mlflowpack/internal/cnb"
 )
 
 const (
@@ -64,7 +64,7 @@ func (m *Manager) GetLayerPath(name string) string {
 // EnsureLayer creates the layer directory if it doesn't exist.
 func (m *Manager) EnsureLayer(name string) (string, error) {
 	path := m.GetLayerPath(name)
-	if err := os.MkdirAll(path, 0755); err != nil {
+	if err := os.MkdirAll(path, 0o755); err != nil {
 		return "", err
 	}
 	return path, nil
@@ -73,7 +73,7 @@ func (m *Manager) EnsureLayer(name string) (string, error) {
 // SetupLayer creates the layer directory and writes layer.toml.
 func SetupLayer(layersDir, layerName string, types cnb.LayerTypes) (string, error) {
 	path := filepath.Join(layersDir, layerName)
-	if err := os.MkdirAll(path, 0755); err != nil {
+	if err := os.MkdirAll(path, 0o755); err != nil {
 		return "", err
 	}
 

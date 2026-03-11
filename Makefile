@@ -1,6 +1,6 @@
-.PHONY: all build test lint clean package stack-build stack-run stack builder
+.PHONY: all build test lint clean package stack-build stack-run stack builder e2e e2e-build e2e-runtime e2e-models
 
-BUILDPACK_ID := io.amazme.buildpacks.mlflow-model
+BUILDPACK_ID := io.github.aagumin.mlflow-model
 VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "0.1.0")
 TIMEOUT ?= 600
 
@@ -25,6 +25,8 @@ build:
 	cd buildpack && CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -o bin/linux-arm64/detect ./cmd/detect
 	cd buildpack && CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -o bin/linux-arm64/build ./cmd/build
 	chmod +x buildpack/bin/detect buildpack/bin/build
+	chmod +x buildpack/bin/linux-amd64/detect buildpack/bin/linux-amd64/build
+	chmod +x buildpack/bin/linux-arm64/detect buildpack/bin/linux-arm64/build
 
 test:
 	cd buildpack && GOCACHE=/tmp/aipack-go-cache go test -v ./...
@@ -45,10 +47,10 @@ package: build
 # ============================================================
 
 stack-build:
-	$(CONTAINER_TOOL) build -t amazme/fedora-mlserver-build:43 stack/build
+	$(CONTAINER_TOOL) build -t aagumin/fedora-mlserver-build:43 stack/build
 
 stack-run:
-	$(CONTAINER_TOOL) build -t amazme/fedora-mlserver-run:43 stack/run
+	$(CONTAINER_TOOL) build -t aagumin/fedora-mlserver-run:43 stack/run
 
 stack: stack-build stack-run
 
@@ -57,7 +59,7 @@ stack: stack-build stack-run
 # ============================================================
 
 builder: stack package
-	$(PACK) builder create amazme/mlserver-builder:${VERSION} \
+	$(PACK) builder create aagumin/mlserver-builder:${VERSION} \
 		--config builder.toml \
 		--pull-policy never \
 		--verbose
@@ -69,6 +71,19 @@ builder: stack package
 dev-train:
 	python dev/train.py
 
+e2e-models:
+	./.venv/bin/python e2e/scripts/generate_models.py
+
+e2e-build:
+	./e2e/scripts/verify-build.sh pyfunc
+	./e2e/scripts/verify-build.sh sklearn
+
+e2e-runtime:
+	./e2e/scripts/verify-runtime.sh pyfunc
+	./e2e/scripts/verify-runtime.sh sklearn
+
+e2e:
+	./e2e/scripts/run-all.sh
 
 clean:
 	rm -rf buildpack/bin/linux-amd64

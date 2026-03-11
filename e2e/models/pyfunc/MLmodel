@@ -1,0 +1,29 @@
+flavors:
+  python_function:
+    cloudpickle_version: 3.1.2
+    code: null
+    env:
+      conda: conda.yaml
+      virtualenv: python_env.yaml
+    loader_module: mlflow.pyfunc.model
+    python_model: python_model.pkl
+    python_version: 3.10.18
+    streamable: false
+is_signature_from_type_hint: false
+mlflow_version: 3.10.1
+model_id: null
+model_size_bytes: 1769
+model_uuid: 85c95bf9af454ab78bbd61afea1b8ce0
+prompts: null
+saved_input_example_info:
+  artifact_path: input_example.json
+  pandas_orient: split
+  serving_input_path: serving_input_example.json
+  type: dataframe
+signature:
+  inputs: '[{"type": "double", "name": "a", "required": true}, {"type": "double",
+    "name": "b", "required": true}]'
+  outputs: '[{"type": "double", "name": "sum", "required": true}]'
+  params: null
+type_hint_from_example: false
+utc_time_created: '2026-03-10 09:25:04.322719'

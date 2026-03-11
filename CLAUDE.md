@@ -16,7 +16,7 @@ CNCF Buildpack for building container images with ML models from MLflow Model Re
 - `make build` compiles `buildpack/bin/{build,detect}` for Linux.
 - `make test` runs Go tests with race detector (`go test -v -race ./...`).
 - `make lint` runs `golangci-lint` for the Go module.
-- `make stack` builds stack images (`amazme/fedora-mlserver-build:43`, `...-run:43`).
+- `make stack` builds stack images (`aagumin/fedora-mlserver-build:43`, `...-run:43`).
 - `make package` packages the buildpack for `pack`.
 - `make builder` runs full local builder assembly (`stack + package + builder create`).
 - Direct module test: `cd buildpack && go test ./...`.

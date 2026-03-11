@@ -68,11 +68,11 @@ var MLServerExtensions = map[string]MLServerExtension{
 	},
 	"mlflow": {
 		PipPackage: "mlserver-mlflow",
-		Runtime:    "mlserver_mlflow.MLflowModel",
+		Runtime:    "mlserver_mlflow.MLflowRuntime",
 	},
 	"python_function": {
 		PipPackage: "mlserver-mlflow",
-		Runtime:    "mlserver_mlflow.MLflowModel",
+		Runtime:    "mlserver_mlflow.MLflowRuntime",
 	},
 }
 

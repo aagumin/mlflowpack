@@ -4,20 +4,21 @@ package build
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
 
-	"github.com/amazme/aipack/buildpack/internal/bindings"
-	"github.com/amazme/aipack/buildpack/internal/cnb"
-	"github.com/amazme/aipack/buildpack/internal/conda"
-	"github.com/amazme/aipack/buildpack/internal/detect"
-	"github.com/amazme/aipack/buildpack/internal/layer"
-	"github.com/amazme/aipack/buildpack/internal/mlflow"
-	"github.com/amazme/aipack/buildpack/internal/mlflow/storage"
-	"github.com/amazme/aipack/buildpack/internal/python"
+	"github.com/aagumin/mlflowpack/internal/bindings"
+	"github.com/aagumin/mlflowpack/internal/cnb"
+	"github.com/aagumin/mlflowpack/internal/conda"
+	"github.com/aagumin/mlflowpack/internal/detect"
+	"github.com/aagumin/mlflowpack/internal/layer"
+	"github.com/aagumin/mlflowpack/internal/mlflow"
+	"github.com/aagumin/mlflowpack/internal/mlflow/storage"
+	"github.com/aagumin/mlflowpack/internal/python"
 )
 
 const (
@@ -49,7 +50,11 @@ func Build(ctx cnb.BuildContext) (cnb.BuildResult, error) {
 		return result, err
 	}
 	if modelSource.Type == "registry" && model.Path != "" {
-		defer os.RemoveAll(model.Path)
+		defer func() {
+			if cleanupErr := os.RemoveAll(model.Path); cleanupErr != nil {
+				fmt.Fprintf(os.Stderr, "warning: failed to remove temporary model directory %q: %v\n", model.Path, cleanupErr)
+			}
+		}()
 	}
 
 	// Parse MLmodel file to detect flavor
@@ -156,18 +161,35 @@ type dependencySource struct {
 }
 
 func determineModelSource(ctx cnb.BuildContext) (*modelSource, error) {
-	// Check for local MLmodel file
-	mlmodelPath := filepath.Join(ctx.AppDir, detect.MLmodelFile)
-	if _, err := os.Stat(mlmodelPath); err == nil {
+	// models://... in BP_MLFLOW_MODEL_PATH explicitly selects registry source.
+	if name, version, ok, err := detect.DetectFromModelPathEnv(); err != nil {
+		return nil, err
+	} else if ok {
 		return &modelSource{
-			Type: "local",
-			Path: ctx.AppDir,
-			Name: "model",
+			Type:    "registry",
+			Name:    name,
+			Version: version,
 		}, nil
 	}
 
+	// Check for local model directory (root, recursive, or BP_MLFLOW_MODEL_PATH).
+	localModelDir, err := detect.FindLocalModelDir(ctx.AppDir)
+	if err == nil {
+		return &modelSource{
+			Type: "local",
+			Path: localModelDir,
+			Name: "model",
+		}, nil
+	}
+	if !errors.Is(err, detect.ErrLocalModelNotFound) {
+		return nil, err
+	}
+
 	// Check for registry model via environment variables
-	name, version, ok := detect.DetectFromEnv()
+	name, version, ok, err := detect.DetectFromEnv()
+	if err != nil {
+		return nil, err
+	}
 	if ok {
 		return &modelSource{
 			Type:    "registry",
@@ -176,7 +198,11 @@ func determineModelSource(ctx cnb.BuildContext) (*modelSource, error) {
 		}, nil
 	}
 
-	return nil, fmt.Errorf("no model source found: provide MLmodel file or set BP_MLFLOW_MODEL_NAME")
+	return nil, fmt.Errorf(
+		"no model source found: provide %s (root or nested, or set %s) or set BP_MLFLOW_MODEL_NAME",
+		detect.MLmodelFile,
+		detect.EnvModelPath,
+	)
 }
 
 func getModel(ctx cnb.BuildContext, source *modelSource) (*mlflow.Model, error) {
@@ -313,7 +339,7 @@ func addMLServerDependencies(condaFile *conda.File, extensionPackage string) {
 }
 
 func copyModel(model *mlflow.Model, destPath string) error {
-	if err := os.MkdirAll(destPath, 0755); err != nil {
+	if err := os.MkdirAll(destPath, 0o755); err != nil {
 		return err
 	}
 
@@ -342,21 +368,32 @@ func copyModel(model *mlflow.Model, destPath string) error {
 	return nil
 }
 
-func copyFile(src, dst string, mode os.FileMode) error {
+func copyFile(src, dst string, mode os.FileMode) (err error) {
 	input, err := os.Open(src)
 	if err != nil {
 		return err
 	}
-	defer input.Close()
+	defer func() {
+		if closeErr := input.Close(); closeErr != nil {
+			err = errors.Join(err, fmt.Errorf("closing source file %q: %w", src, closeErr))
+		}
+	}()
 
 	output, err := os.OpenFile(dst, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, mode)
 	if err != nil {
 		return err
 	}
-	defer output.Close()
+	defer func() {
+		if closeErr := output.Close(); closeErr != nil {
+			err = errors.Join(err, fmt.Errorf("closing destination file %q: %w", dst, closeErr))
+		}
+	}()
 
-	_, err = io.Copy(output, input)
-	return err
+	if _, err = io.Copy(output, input); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // writeModelSettings writes the model-settings.json file for mlserver.
@@ -368,5 +405,5 @@ func writeModelSettings(modelPath string, settings map[string]interface{}) error
 		return err
 	}
 
-	return os.WriteFile(settingsPath, data, 0644)
+	return os.WriteFile(settingsPath, data, 0o644)
 }

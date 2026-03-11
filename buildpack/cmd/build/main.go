@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/amazme/aipack/buildpack/internal/build"
-	"github.com/amazme/aipack/buildpack/internal/cnb"
+	"github.com/aagumin/mlflowpack/internal/build"
+	"github.com/aagumin/mlflowpack/internal/cnb"
 )
 
 func main() {

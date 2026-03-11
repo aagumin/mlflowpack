@@ -1,0 +1,26 @@
+{
+  "inputs": [
+    {
+      "name": "a",
+      "shape": [
+        2
+      ],
+      "datatype": "FP64",
+      "data": [
+        1.5,
+        2.0
+      ]
+    },
+    {
+      "name": "b",
+      "shape": [
+        2
+      ],
+      "datatype": "FP64",
+      "data": [
+        2.5,
+        3.0
+      ]
+    }
+  ]
+}

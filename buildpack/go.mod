@@ -1,4 +1,4 @@
-module github.com/amazme/aipack/buildpack
+module github.com/aagumin/mlflowpack
 
 go 1.24.0
 

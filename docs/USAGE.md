@@ -57,14 +57,14 @@ lima pack --version
 
 **Вариант 1: Собрать локально**
 ```bash
-git clone https://github.com/amazme/aipack.git
-cd aipack
+git clone https://github.com/aagumin/mlflowpack.git
+cd mlflowpack
 make builder
 ```
 
 **Вариант 2: Использовать готовый (когда опубликован)**
 ```bash
-pack builder pull amazme/mlserver-builder:0.1.0
+pack builder pull aagumin/mlserver-builder:0.1.0
 ```
 
 ---
@@ -86,7 +86,7 @@ my-model/
 **macOS с Lima:**
 ```bash
 lima pack build my-model-image \
-  --builder amazme/mlserver-builder:0.1.0 \
+  --builder aagumin/mlserver-builder:0.1.0 \
   --path my-model \
   --pull-policy never \
   --docker-host=inherit \
@@ -96,30 +96,70 @@ lima pack build my-model-image \
 **Linux:**
 ```bash
 pack build my-model-image \
-  --builder amazme/mlserver-builder:0.1.0 \
+  --builder aagumin/mlserver-builder:0.1.0 \
   --path my-model
 ```
 
-### Сценарий 2: Использование тестовой модели
+### Сценарий 2: Полный e2e цикл на тестовых моделях (pyfunc + sklearn)
 
-В репозитории есть готовая тестовая модель в папке `test-model/`:
+В репозитории есть две готовые MLflow модели:
+- `e2e/models/pyfunc` (`python_function`)
+- `e2e/models/sklearn` (`sklearn`)
+
+Их можно прогонять полностью через e2e-скрипты.
+
+#### Вариант A: полный цикл одной командой
 
 ```bash
-# Сборка (macOS с Lima)
-lima pack build test-mlflow-model \
-  --builder amazme/mlserver-builder:0.1.0 \
-  --path test-model \
-  --pull-policy never \
-  --docker-host=inherit \
-  --trust-builder
+# 1) Собрать локальный builder
+make builder
 
-# Запуск
-docker run --rm -p 8080:8080 -e MLSERVER_PARALLEL_WORKERS=0 test-mlflow-model:latest
+# 2) Для обеих моделей выполнить:
+#    - упаковку образа через buildpack
+#    - запуск контейнера
+#    - проверку readiness (/v2/health/ready)
+#    - inference запрос
+#    - сравнение ответа с expected-response.json
+make e2e
+```
 
-# Тест инференса
-curl -X POST http://localhost:8080/v2/models/model/infer \
+#### Вариант B: полный цикл вручную (пример sklearn)
+
+```bash
+# 1) Упаковать образ из e2e модели
+./e2e/scripts/verify-build.sh sklearn
+
+# 2) Запустить контейнер
+docker run --rm --name e2e-sklearn -p 8080:8080 \
+  -e MLSERVER_PARALLEL_WORKERS=0 \
+  aipack-e2e-sklearn:local
+```
+
+Во втором терминале:
+
+```bash
+# 3) Проверить readiness
+curl -fsS http://localhost:8080/v2/health/ready
+
+# 4) Отправить inference request из тестового файла
+curl -fsS -X POST http://localhost:8080/v2/models/model/infer \
   -H "Content-Type: application/json" \
-  -d '{"inputs": [{"name": "input", "shape": [1, 4], "datatype": "FP32", "data": [[5.1, 3.5, 1.4, 0.2]]}]}'
+  -d @e2e/models/sklearn/test-request.json
+
+# 5) Быстро посмотреть предсказания (ожидается [0, 1])
+curl -fsS -X POST http://localhost:8080/v2/models/model/infer \
+  -H "Content-Type: application/json" \
+  -d @e2e/models/sklearn/test-request.json | \
+python3 -c 'import json,sys; print(json.load(sys.stdin)["outputs"][0]["data"])'
+```
+
+#### Вариант C: полный цикл вручную (пример pyfunc)
+
+```bash
+# Build + run + readiness + infer + проверка expected-response.json
+./e2e/scripts/verify-runtime.sh pyfunc
+
+# Ожидаемый inference output_data: [4.0, 5.0]
 ```
 
 ---
@@ -154,6 +194,9 @@ export BP_MLFLOW_MODEL_NAME="my-classifier"
 export BP_MLFLOW_MODEL_VERSION="3"  # или "latest"
 # ИЛИ по stage
 export BP_MLFLOW_MODEL_STAGE="Production"
+
+# Альтернатива через единый URI:
+export BP_MLFLOW_MODEL_PATH="models://my-classifier/Production"
 ```
 
 ### Полная команда сборки
@@ -161,7 +204,7 @@ export BP_MLFLOW_MODEL_STAGE="Production"
 ```bash
 # macOS с Lima
 lima pack build my-registry-model \
-  --builder amazme/mlserver-builder:0.1.0 \
+  --builder aagumin/mlserver-builder:0.1.0 \
   --env BP_MLFLOW_MODEL_NAME=my-classifier \
   --env BP_MLFLOW_MODEL_VERSION=latest \
   --volume $(pwd)/bindings:/bindings/mlflow \
@@ -171,7 +214,7 @@ lima pack build my-registry-model \
 
 # Linux
 pack build my-registry-model \
-  --builder amazme/mlserver-builder:0.1.0 \
+  --builder aagumin/mlserver-builder:0.1.0 \
   --env BP_MLFLOW_MODEL_NAME=my-classifier \
   --env BP_MLFLOW_MODEL_VERSION=latest \
   --volume $(pwd)/bindings:/bindings/mlflow
@@ -188,8 +231,17 @@ pack build my-registry-model \
 | `BP_MLFLOW_MODEL_NAME` | Да* | Имя зарегистрированной модели |
 | `BP_MLFLOW_MODEL_VERSION` | Нет | Версия модели (по умолчанию `latest`) |
 | `BP_MLFLOW_MODEL_STAGE` | Нет | Stage модели: `Production`, `Staging`, `Archived` |
+| `BP_MLFLOW_MODEL_PATH` | Нет | Локальный путь к модели ИЛИ `models://<name>[/<version-or-stage>]` для Model Registry |
 
 *\* Обязательно только при сборке из registry. При локальной модели определяется автоматически.*
+
+Локальная модель теперь определяется так:
+- если `BP_MLFLOW_MODEL_PATH` начинается с `models://`, buildpack использует Model Registry (локальная файловая система не сканируется),
+- иначе сначала `BP_MLFLOW_MODEL_PATH` (если задан),
+- затем `MLmodel` в корне `--path`,
+- затем рекурсивный поиск единственного `MLmodel` под `--path`.
+
+Если найдено несколько `MLmodel`, buildpack завершится ошибкой неоднозначности и попросит указать `BP_MLFLOW_MODEL_PATH`.
 
 ### Service Bindings структура
 
@@ -384,7 +436,7 @@ spec:
 
 ```bash
 lima pack build my-model \
-  --builder amazme/mlserver-builder:0.1.0 \
+  --builder aagumin/mlserver-builder:0.1.0 \
   --path my-model \
   --env CNB_LOG_LEVEL=debug \
   --pull-policy never \

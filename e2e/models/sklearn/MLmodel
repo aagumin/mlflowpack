@@ -1,0 +1,33 @@
+flavors:
+  python_function:
+    env:
+      conda: conda.yaml
+      virtualenv: python_env.yaml
+    loader_module: mlflow.sklearn
+    model_path: model.pkl
+    predict_fn: predict
+    python_version: 3.10.18
+  sklearn:
+    code: null
+    pickled_model: model.pkl
+    serialization_format: cloudpickle
+    sklearn_version: 1.7.2
+    skops_trusted_types: null
+is_signature_from_type_hint: false
+mlflow_version: 3.10.1
+model_id: null
+model_size_bytes: 971
+model_uuid: 9c2ddb86994c45c8be969f06893a4b64
+prompts: null
+saved_input_example_info:
+  artifact_path: input_example.json
+  pandas_orient: split
+  serving_input_path: serving_input_example.json
+  type: dataframe
+signature:
+  inputs: '[{"type": "double", "name": "f1", "required": true}, {"type": "double",
+    "name": "f2", "required": true}]'
+  outputs: '[{"type": "long", "required": true}]'
+  params: null
+type_hint_from_example: false
+utc_time_created: '2026-03-10 09:25:06.209301'

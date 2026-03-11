@@ -1,10 +1,10 @@
 api = "0.12"
 
 [buildpack]
-id = "io.amazme.buildpacks.mlflow-model"
+id = "io.github.aagumin.mlflow-model"
 version = "0.1.0"
 name = "MLflow Model Buildpack"
-homepage = "https://github.com/amazme/aipack"
+homepage = "https://github.com/aagumin/mlflowpack"
 description = "Buildpack for MLflow models with MLServer runtime"
 
 # Modern targets approach (replaces deprecated stacks)

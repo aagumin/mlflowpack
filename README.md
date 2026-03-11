@@ -44,27 +44,22 @@ brew install pack lima
 
 ```bash
 # Клонировать репозиторий
-git clone https://github.com/amazme/aipack.git
-cd aipack
+git clone https://github.com/aagumin/mlflowpack.git
+cd mlflowpack
 
 # Собрать builder
 make builder
 
-# Собрать образ с моделью (macOS с Lima)
-lima pack build my-mlflow-model \
-  --builder amazme/mlserver-builder:<version> \
-  --path test-model \
-  --pull-policy never \
-  --docker-host=inherit \
-  --trust-builder
+# Прогнать локальные e2e проверки (pyfunc + sklearn модели)
+make e2e
 
 # Запустить
-docker run -p 8080:8080 -e MLSERVER_PARALLEL_WORKERS=0 my-mlflow-model
+docker run -p 8080:8080 -e MLSERVER_PARALLEL_WORKERS=0 aipack-e2e-sklearn:local
 
 # Тест инференса
 curl -X POST http://localhost:8080/v2/models/model/infer \
   -H "Content-Type: application/json" \
-  -d '{"inputs": [{"name": "input", "shape": [1, 4], "datatype": "FP32", "data": [[5.1, 3.5, 1.4, 0.2]]}]}'
+  -d @e2e/models/sklearn/test-request.json
 ```
 
 ### Сборка с моделью из MLflow Registry
@@ -77,7 +72,7 @@ echo "https://mlflow.example.com" > bindings/mlflow/tracking_uri
 
 # Собрать
 lima pack build my-model \
-  --builder amazme/mlserver-builder:<version> \
+  --builder aagumin/mlserver-builder:<version> \
   --env BP_MLFLOW_MODEL_NAME=my-classifier \
   --env BP_MLFLOW_MODEL_VERSION=latest \
   --volume ./bindings:/bindings/mlflow \
@@ -95,6 +90,7 @@ make lint      # Запустить linter
 make stack     # Собрать stack images
 make package   # Упаковать buildpack
 make builder   # Создать builder (stack + package)
+make e2e       # Build+runtime проверки e2e моделей
 ```
 
 ## Конфигурация
@@ -106,6 +102,11 @@ make builder   # Создать builder (stack + package)
 | `BP_MLFLOW_MODEL_NAME` | Имя модели в Registry | — |
 | `BP_MLFLOW_MODEL_VERSION` | Версия модели | `latest` |
 | `BP_MLFLOW_MODEL_STAGE` | Stage модели (Production, Staging) | — |
+| `BP_MLFLOW_MODEL_PATH` | Локальный путь к модели ИЛИ `models://<name>[/<version-or-stage>]` для Registry | auto-detect |
+
+Если `BP_MLFLOW_MODEL_PATH` начинается с `models://`, buildpack скачивает модель из Registry.  
+Иначе локальная модель определяется автоматически по `MLmodel` (корень или рекурсивный поиск).  
+Если найдено несколько `MLmodel`, укажите `BP_MLFLOW_MODEL_PATH`.
 
 ### Service Bindings
 
