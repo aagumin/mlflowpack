@@ -200,3 +200,66 @@ func GetBindingsDir() string {
 	}
 	return DefaultBindingsDir
 }
+
+// ReadMLflowBindingWithFallback reads MLflow binding with environment variable fallback.
+// Bindings take priority over environment variables.
+func (r *Reader) ReadMLflowBindingWithFallback() (*MLflowBinding, error) {
+	// Try bindings first
+	binding, err := r.ReadMLflowBinding()
+	if err != nil {
+		return nil, err
+	}
+	if binding != nil {
+		return binding, nil
+	}
+
+	// Fallback to environment variables
+	return readMLflowFromEnv(), nil
+}
+
+// ReadS3BindingWithFallback reads S3 binding with environment variable fallback.
+// Bindings take priority over environment variables.
+func (r *Reader) ReadS3BindingWithFallback() (*S3Binding, error) {
+	// Try bindings first
+	binding, err := r.ReadS3Binding()
+	if err != nil {
+		return nil, err
+	}
+	if binding != nil {
+		return binding, nil
+	}
+
+	// Fallback to environment variables
+	return readS3FromEnv(), nil
+}
+
+func readMLflowFromEnv() *MLflowBinding {
+	uri := os.Getenv("MLFLOW_TRACKING_URI")
+	if uri == "" {
+		uri = os.Getenv("DATABRICKS_HOST")
+	}
+	if uri == "" {
+		return nil
+	}
+
+	return &MLflowBinding{
+		TrackingURI: uri,
+		Username:    os.Getenv("MLFLOW_TRACKING_USERNAME"),
+		Password:    os.Getenv("MLFLOW_TRACKING_PASSWORD"),
+	}
+}
+
+func readS3FromEnv() *S3Binding {
+	accessKey := os.Getenv("AWS_ACCESS_KEY_ID")
+	secretKey := os.Getenv("AWS_SECRET_ACCESS_KEY")
+	if accessKey == "" || secretKey == "" {
+		return nil
+	}
+
+	return &S3Binding{
+		Endpoint:  os.Getenv("AWS_ENDPOINT_URL"),
+		AccessKey: accessKey,
+		SecretKey: secretKey,
+		Region:    os.Getenv("AWS_REGION"),
+	}
+}

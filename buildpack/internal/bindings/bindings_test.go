@@ -94,3 +94,93 @@ func writeBindingFile(t *testing.T, dir, name, content string) {
 		t.Fatalf("write %s: %v", name, err)
 	}
 }
+
+func TestReadMLflowBindingWithFallback_EnvVars(t *testing.T) {
+	// Setup temp dir for bindings (empty)
+	tempDir := t.TempDir()
+	reader := NewReader(tempDir)
+
+	// Set env vars
+	t.Setenv("MLFLOW_TRACKING_URI", "https://mlflow.example.com")
+	t.Setenv("MLFLOW_TRACKING_USERNAME", "testuser")
+	t.Setenv("MLFLOW_TRACKING_PASSWORD", "testpass")
+
+	binding, err := reader.ReadMLflowBindingWithFallback()
+	if err != nil {
+		t.Fatalf("ReadMLflowBindingWithFallback() error = %v", err)
+	}
+	if binding == nil {
+		t.Fatal("ReadMLflowBindingWithFallback() returned nil")
+	}
+	if binding.TrackingURI != "https://mlflow.example.com" {
+		t.Errorf("TrackingURI = %q, want %q", binding.TrackingURI, "https://mlflow.example.com")
+	}
+	if binding.Username != "testuser" {
+		t.Errorf("Username = %q, want %q", binding.Username, "testuser")
+	}
+	if binding.Password != "testpass" {
+		t.Errorf("Password = %q, want %q", binding.Password, "testpass")
+	}
+}
+
+func TestReadMLflowBindingWithFallback_BindingsPriority(t *testing.T) {
+	// Setup temp dir with binding
+	tempDir := t.TempDir()
+	mlflowDir := filepath.Join(tempDir, "mlflow")
+	if err := os.MkdirAll(mlflowDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(mlflowDir, "type"), []byte("mlflow"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(mlflowDir, "tracking_uri"), []byte("https://binding.example.com"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Set env vars (should be ignored)
+	t.Setenv("MLFLOW_TRACKING_URI", "https://env.example.com")
+
+	reader := NewReader(tempDir)
+	binding, err := reader.ReadMLflowBindingWithFallback()
+	if err != nil {
+		t.Fatalf("ReadMLflowBindingWithFallback() error = %v", err)
+	}
+	if binding == nil {
+		t.Fatal("ReadMLflowBindingWithFallback() returned nil")
+	}
+	// Bindings should take priority
+	if binding.TrackingURI != "https://binding.example.com" {
+		t.Errorf("TrackingURI = %q, want %q (from bindings)", binding.TrackingURI, "https://binding.example.com")
+	}
+}
+
+func TestReadS3BindingWithFallback_EnvVars(t *testing.T) {
+	tempDir := t.TempDir()
+	reader := NewReader(tempDir)
+
+	// Set env vars
+	t.Setenv("AWS_ACCESS_KEY_ID", "test-access-key")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "test-secret-key")
+	t.Setenv("AWS_REGION", "us-west-2")
+	t.Setenv("AWS_ENDPOINT_URL", "https://s3.example.com")
+
+	binding, err := reader.ReadS3BindingWithFallback()
+	if err != nil {
+		t.Fatalf("ReadS3BindingWithFallback() error = %v", err)
+	}
+	if binding == nil {
+		t.Fatal("ReadS3BindingWithFallback() returned nil")
+	}
+	if binding.AccessKey != "test-access-key" {
+		t.Errorf("AccessKey = %q, want %q", binding.AccessKey, "test-access-key")
+	}
+	if binding.SecretKey != "test-secret-key" {
+		t.Errorf("SecretKey = %q, want %q", binding.SecretKey, "test-secret-key")
+	}
+	if binding.Region != "us-west-2" {
+		t.Errorf("Region = %q, want %q", binding.Region, "us-west-2")
+	}
+	if binding.Endpoint != "https://s3.example.com" {
+		t.Errorf("Endpoint = %q, want %q", binding.Endpoint, "https://s3.example.com")
+	}
+}
