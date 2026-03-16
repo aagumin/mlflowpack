@@ -11,7 +11,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/aagumin/mlflowpack/internal/bindings"
 	"github.com/aagumin/mlflowpack/internal/cnb"
 	"github.com/aagumin/mlflowpack/internal/conda"
 	"github.com/aagumin/mlflowpack/internal/detect"
@@ -209,18 +208,10 @@ func getModel(ctx cnb.BuildContext, source *modelSource) (*mlflow.Model, error) 
 		return mlflow.NewLocalModel(source.Path), nil
 	}
 
-	// Get bindings with env vars fallback
-	bindingsDir := bindings.GetBindingsDir()
-	reader := bindings.NewReader(bindingsDir)
-
-	// Check for MLflow binding (optional - env vars work without it)
-	mlflowBinding, err := reader.ReadMLflowBindingWithFallback()
-	if err != nil {
-		return nil, fmt.Errorf("reading MLflow binding: %w", err)
-	}
-	if mlflowBinding == nil {
-		return nil, fmt.Errorf("MLflow credentials not found: provide bindings at %s or set MLFLOW_TRACKING_URI environment variable", bindingsDir)
-	}
+	// modctl reads MLflow credentials directly from environment:
+	// - MLFLOW_TRACKING_URI, MLFLOW_TRACKING_USERNAME, MLFLOW_TRACKING_PASSWORD
+	// - DATABRICKS_HOST, DATABRICKS_TOKEN
+	// S3 credentials are read from AWS_* env vars or ~/.aws/* files
 
 	// Create temp directory for download
 	tempDir, err := os.MkdirTemp("", "mlflow-model-")
