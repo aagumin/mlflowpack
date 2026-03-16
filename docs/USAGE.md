@@ -166,38 +166,51 @@ python3 -c 'import json,sys; print(json.load(sys.stdin)["outputs"][0]["data"])'
 
 ## Сборка с MLflow Registry
 
-### Настройка Service Bindings
+### Минимальная настройка
 
-Service Bindings — механизм передачи credentials в buildpack.
+Укажите путь к модели и креды MLflow через переменные окружения:
 
 ```bash
-# Создать структуру директорий
-mkdir -p bindings/mlflow/s3
-
 # MLflow credentials
-echo "mlflow" > bindings/mlflow/type
-echo "https://mlflow.your-company.com" > bindings/mlflow/tracking_uri
-echo "your-username" > bindings/mlflow/username
-echo "your-password" > bindings/mlflow/password
+export MLFLOW_TRACKING_URI="https://mlflow.your-company.com"
+export MLFLOW_TRACKING_USERNAME="your-username"
+export MLFLOW_TRACKING_PASSWORD="your-password"
 
-# S3 credentials (если артефакты хранятся в S3)
-echo "https://s3.your-company.com" > bindings/mlflow/s3/endpoint
-echo "your-access-key" > bindings/mlflow/s3/access_key
-echo "your-secret-key" > bindings/mlflow/s3/secret_key
-echo "us-east-1" > bindings/mlflow/s3/region
+# ИЛИ Databricks credentials
+export DATABRICKS_HOST="https://your-workspace.cloud.databricks.com"
+export DATABRICKS_TOKEN="your-token"
+
+# Сборка
+pack build my-model \
+  --builder aagumin/mlserver-builder:0.1.0 \
+  --env BP_MLFLOW_MODEL_PATH="models:/my-classifier/1"
 ```
 
 ### Переменные окружения
 
-```bash
-export BP_MLFLOW_MODEL_NAME="my-classifier"
-export BP_MLFLOW_MODEL_VERSION="3"  # или "latest"
-# ИЛИ по stage
-export BP_MLFLOW_MODEL_STAGE="Production"
+**MLflow:**
 
-# Альтернатива через единый URI:
-export BP_MLFLOW_MODEL_PATH="models:/my-classifier/Production"
-```
+| Переменная | Описание |
+|------------|----------|
+| `MLFLOW_TRACKING_URI` | URL MLflow сервера |
+| `MLFLOW_TRACKING_USERNAME` | Basic auth username |
+| `MLFLOW_TRACKING_PASSWORD` | Basic auth password |
+
+**Databricks:**
+
+| Переменная | Описание |
+|------------|----------|
+| `DATABRICKS_HOST` | Databricks workspace URL |
+| `DATABRICKS_TOKEN` | Personal access token |
+
+**S3 (для артефактов):**
+
+| Переменная | Описание |
+|------------|----------|
+| `AWS_ACCESS_KEY_ID` | Access key |
+| `AWS_SECRET_ACCESS_KEY` | Secret key |
+| `AWS_REGION` | Region (default: us-east-1) |
+| `AWS_ENDPOINT_URL` | Custom S3 endpoint (MinIO, etc.) |
 
 ### Полная команда сборки
 
@@ -205,9 +218,10 @@ export BP_MLFLOW_MODEL_PATH="models:/my-classifier/Production"
 # macOS с Lima
 lima pack build my-registry-model \
   --builder aagumin/mlserver-builder:0.1.0 \
-  --env BP_MLFLOW_MODEL_NAME=my-classifier \
-  --env BP_MLFLOW_MODEL_VERSION=latest \
-  --volume $(pwd)/bindings:/bindings/mlflow \
+  --env BP_MLFLOW_MODEL_PATH="models:/my-classifier/1" \
+  --env MLFLOW_TRACKING_URI="https://mlflow.company.com" \
+  --env MLFLOW_TRACKING_USERNAME="user" \
+  --env MLFLOW_TRACKING_PASSWORD="pass" \
   --pull-policy never \
   --docker-host=inherit \
   --trust-builder
@@ -215,44 +229,11 @@ lima pack build my-registry-model \
 # Linux
 pack build my-registry-model \
   --builder aagumin/mlserver-builder:0.1.0 \
-  --env BP_MLFLOW_MODEL_NAME=my-classifier \
-  --env BP_MLFLOW_MODEL_VERSION=latest \
-  --volume $(pwd)/bindings:/bindings/mlflow
+  --env BP_MLFLOW_MODEL_PATH="models:/my-classifier/1" \
+  --env MLFLOW_TRACKING_URI="https://mlflow.company.com" \
+  --env MLFLOW_TRACKING_USERNAME="user" \
+  --env MLFLOW_TRACKING_PASSWORD="pass"
 ```
-
-### Настройка через Environment Variables (для локальной разработки)
-
-Вместо bindings можно использовать environment variables:
-
-```bash
-# MLflow Registry
-export MLFLOW_TRACKING_URI="https://mlflow.your-company.com"
-export MLFLOW_TRACKING_USERNAME="your-username"
-export MLFLOW_TRACKING_PASSWORD="your-password"
-
-# S3 (для артефактов)
-export AWS_ACCESS_KEY_ID="your-access-key"
-export AWS_SECRET_ACCESS_KEY="your-secret-key"
-export AWS_REGION="us-east-1"
-export AWS_ENDPOINT_URL="https://s3.your-company.com"  # опционально
-
-# Сборка
-pack build my-registry-model \
-  --builder aagumin/mlserver-builder:0.1.0 \
-  --env BP_MLFLOW_MODEL_PATH="models:/my-classifier/1"
-```
-
-### Переменные окружения для Registry
-
-| Переменная | Описание |
-|------------|----------|
-| `MLFLOW_TRACKING_URI` | URL MLflow сервера (или DATABRICKS_HOST) |
-| `MLFLOW_TRACKING_USERNAME` | Basic auth username |
-| `MLFLOW_TRACKING_PASSWORD` | Basic auth password |
-| `AWS_ACCESS_KEY_ID` | S3 access key |
-| `AWS_SECRET_ACCESS_KEY` | S3 secret key |
-| `AWS_REGION` | AWS region |
-| `AWS_ENDPOINT_URL` | Custom S3 endpoint (MinIO, etc.) |
 
 ---
 
@@ -262,10 +243,7 @@ pack build my-registry-model \
 
 | Переменная | Обязательно | Описание |
 |------------|-------------|----------|
-| `BP_MLFLOW_MODEL_NAME` | Да* | Имя зарегистрированной модели |
-| `BP_MLFLOW_MODEL_VERSION` | Нет | Версия модели (по умолчанию `latest`) |
-| `BP_MLFLOW_MODEL_STAGE` | Нет | Stage модели: `Production`, `Staging`, `Archived` |
-| `BP_MLFLOW_MODEL_PATH` | Нет | Локальный путь к модели ИЛИ `models:/<name>[/<version-or-stage>]` для Model Registry |
+| `BP_MLFLOW_MODEL_PATH` | Да* | Путь к модели: локальный путь ИЛИ `models:/<name>[/<version-or-stage>]` |
 
 *\* Обязательно только при сборке из registry. При локальной модели определяется автоматически.*
 
@@ -276,21 +254,6 @@ pack build my-registry-model \
 - затем рекурсивный поиск единственного `MLmodel` под `--path`.
 
 Если найдено несколько `MLmodel`, buildpack завершится ошибкой неоднозначности и попросит указать `BP_MLFLOW_MODEL_PATH`.
-
-### Service Bindings структура
-
-```
-/bindings/mlflow/
-├── type              # "mlflow" (обязательно)
-├── tracking_uri      # URL MLflow сервера (обязательно)
-├── username          # Username для Basic Auth (опционально)
-├── password          # Password для Basic Auth (опционально)
-└── s3/               # S3-compatible storage (опционально)
-    ├── endpoint      # S3 endpoint URL
-    ├── access_key    # AWS_ACCESS_KEY_ID
-    ├── secret_key    # AWS_SECRET_ACCESS_KEY
-    └── region        # AWS region (default: us-east-1)
-```
 
 ### Конфигурация модели (conda.yaml)
 
