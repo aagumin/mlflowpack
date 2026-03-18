@@ -241,7 +241,7 @@ pack build my-registry-model \
 
 ### Контракт для operator
 
-Строгая гарантия поддерживается для собственного оператора. Рекомендуемая схема:
+Для собственного оператора это рекомендуемая strict-mode схема. Она даёт намного более жёсткий контроль над layout и временными путями, чем `pack`.
 
 ```text
 /work
@@ -269,7 +269,6 @@ HOME=/work/home \
 XDG_CACHE_HOME=/work/home/.cache \
 UV_CACHE_DIR=/work/cache/uv \
 PIP_CACHE_DIR=/work/cache/pip \
-UV_PYTHON_INSTALL_DIR=/work/layers/python \
 BP_MLFLOW_WORK_DIR=/work/layers/work
 ```
 
@@ -277,7 +276,7 @@ BP_MLFLOW_WORK_DIR=/work/layers/work
 
 ### Best-effort для pack
 
-`pack` можно использовать как совместимый режим, но без такой же жёсткой гарантии, как у собственного оператора. В этом случае стоит смонтировать один writable root, передать его как `--workspace`, и явно задать служебные переменные:
+`pack` можно использовать как совместимый режим, но с менее строгим контролем путей, чем у operator-controlled layout. В этом случае стоит смонтировать один writable root, передать его как `--workspace`, и явно задать служебные переменные:
 
 ```bash
 pack build my-model-image \
@@ -293,7 +292,6 @@ pack build my-model-image \
   --env XDG_CACHE_HOME=/work/home/.cache \
   --env UV_CACHE_DIR=/work/cache/uv \
   --env PIP_CACHE_DIR=/work/cache/pip \
-  --env UV_PYTHON_INSTALL_DIR=/work/layers/python \
   --env BP_MLFLOW_WORK_DIR=/work/layers/work
 ```
 
@@ -310,7 +308,7 @@ Buildpack и helper-слой используют следующие перем�
 | `XDG_CACHE_HOME` | Базовый каталог cache для XDG-aware инструментов |
 | `UV_CACHE_DIR` | Cache `uv` |
 | `PIP_CACHE_DIR` | Cache pip |
-| `UV_PYTHON_INSTALL_DIR` | Каталог установки Python, управляемый `uv` |
+| `UV_PYTHON_INSTALL_DIR` | Каталог установки Python, управляемый `uv`; при ручном override должен совпадать с фактическим python layer path |
 | `BP_MLFLOW_WORK_DIR` | Внутренний scratch root buildpack |
 
 ---
