@@ -13,6 +13,17 @@ trap cleanup EXIT
 
 archive_listing="$(docker export "${container_id}" | tar -tf -)"
 
+if ! grep -qx "home/cnb/" <<<"${archive_listing}"; then
+  echo "expected runtime home directory missing: home/cnb/" >&2
+  exit 1
+fi
+
+passwd_contents="$(docker export "${container_id}" | tar -xOf - etc/passwd)"
+if ! grep -q '^cnb:x:1000:1000:' <<<"${passwd_contents}"; then
+  echo "expected cnb passwd entry missing" >&2
+  exit 1
+fi
+
 for forbidden in \
   "usr/bin/python3" \
   "usr/bin/python3.11" \
