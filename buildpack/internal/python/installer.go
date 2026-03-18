@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 )
 
 const (
@@ -17,20 +18,70 @@ const (
 // Installer handles Python installation using uv.
 type Installer struct {
 	uvPath string
+	env    []string
 }
 
 // NewInstaller creates a new Python installer.
 func NewInstaller() *Installer {
-	return &Installer{
-		uvPath: "uv",
-	}
+	return &Installer{uvPath: "uv"}
 }
 
 // NewInstallerWithPath creates a new Python installer with a custom uv path.
 func NewInstallerWithPath(uvPath string) *Installer {
-	return &Installer{
-		uvPath: uvPath,
+	return &Installer{uvPath: uvPath}
+}
+
+// NewInstallerWithEnv creates a new Python installer with custom command env overrides.
+func NewInstallerWithEnv(env []string) *Installer {
+	return &Installer{uvPath: "uv", env: env}
+}
+
+// NewInstallerWithPathAndEnv creates a new Python installer with a custom uv path and env overrides.
+func NewInstallerWithPathAndEnv(uvPath string, env []string) *Installer {
+	return &Installer{uvPath: uvPath, env: env}
+}
+
+func (i *Installer) command(ctx context.Context, args ...string) *exec.Cmd {
+	cmd := exec.CommandContext(ctx, i.uvPath, args...)
+	cmd.Env = mergeEnv(os.Environ(), i.env)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd
+}
+
+func mergeEnv(base, overrides []string) []string {
+	if len(overrides) == 0 {
+		return append([]string(nil), base...)
 	}
+
+	result := append([]string(nil), base...)
+	index := make(map[string]int, len(result))
+	for i, item := range result {
+		key, _, ok := strings.Cut(item, "=")
+		if !ok {
+			continue
+		}
+		if _, exists := index[key]; !exists {
+			index[key] = i
+		}
+	}
+
+	for _, item := range overrides {
+		key, value, ok := strings.Cut(item, "=")
+		if !ok {
+			continue
+		}
+
+		if i, exists := index[key]; exists {
+			result[i] = key + "=" + value
+			continue
+		}
+
+		index[key] = len(result)
+		result = append(result, key+"="+value)
+	}
+
+	return result
 }
 
 // InstallPython installs Python of the specified version to the given directory.
@@ -42,13 +93,11 @@ func (i *Installer) InstallPython(ctx context.Context, version, installDir strin
 
 	fmt.Printf("Installing Python %s\n", version)
 
-	cmd := exec.CommandContext(ctx, i.uvPath,
+	cmd := i.command(ctx,
 		"python", "install",
 		"--install-dir", installDir,
 		version,
 	)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
 
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("installing python %s: %w", version, err)
@@ -70,13 +119,11 @@ func (i *Installer) CreateVenv(ctx context.Context, pythonPath, venvDir string) 
 
 	fmt.Printf("Creating venv with Python at %s\n", venvDir)
 
-	cmd := exec.CommandContext(ctx, i.uvPath,
+	cmd := i.command(ctx,
 		"venv",
 		"--python", pythonPath,
 		venvDir,
 	)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
 
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("creating venv: %w", err)
@@ -99,9 +146,7 @@ func (i *Installer) InstallDeps(ctx context.Context, venvDir string, deps []stri
 	}
 	args = append(args, deps...)
 
-	cmd := exec.CommandContext(ctx, i.uvPath, args...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	cmd := i.command(ctx, args...)
 
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("installing dependencies: %w", err)
@@ -114,13 +159,11 @@ func (i *Installer) InstallDeps(ctx context.Context, venvDir string, deps []stri
 func (i *Installer) InstallDepsFromFile(ctx context.Context, venvDir, requirementsFile string) error {
 	pythonBin := filepath.Join(venvDir, "bin", "python")
 
-	cmd := exec.CommandContext(ctx, i.uvPath,
+	cmd := i.command(ctx,
 		"pip", "install",
 		"--python", pythonBin,
 		"-r", requirementsFile,
 	)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
 
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("installing dependencies from file: %w", err)
