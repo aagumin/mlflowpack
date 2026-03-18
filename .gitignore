@@ -1,4 +1,5 @@
 .claude/
+.worktrees/
 # OS / editor
 .DS_Store
 *.swp
