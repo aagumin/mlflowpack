@@ -172,15 +172,34 @@ func installerEnv(ctx cnb.BuildContext) ([]string, error) {
 		}
 	}
 
-	return []string{
-		"TMPDIR=" + tmpDir,
-		"TMP=" + tmpDir,
-		"TEMP=" + tmpDir,
-		"HOME=" + homeDir,
-		"XDG_CACHE_HOME=" + filepath.Join(homeDir, ".cache"),
-		"UV_CACHE_DIR=" + uvCacheDir,
-		"PIP_CACHE_DIR=" + pipCacheDir,
-	}, nil
+	env := make([]string, 0, 7)
+
+	if _, ok := os.LookupEnv("TMPDIR"); !ok {
+		env = append(env, "TMPDIR="+tmpDir)
+	}
+	if _, ok := os.LookupEnv("TMP"); !ok {
+		env = append(env, "TMP="+tmpDir)
+	}
+	if _, ok := os.LookupEnv("TEMP"); !ok {
+		env = append(env, "TEMP="+tmpDir)
+	}
+
+	homeValue, ok := os.LookupEnv("HOME")
+	if !ok {
+		homeValue = homeDir
+		env = append(env, "HOME="+homeDir)
+	}
+	if _, ok := os.LookupEnv("XDG_CACHE_HOME"); !ok {
+		env = append(env, "XDG_CACHE_HOME="+filepath.Join(homeValue, ".cache"))
+	}
+	if _, ok := os.LookupEnv("UV_CACHE_DIR"); !ok {
+		env = append(env, "UV_CACHE_DIR="+uvCacheDir)
+	}
+	if _, ok := os.LookupEnv("PIP_CACHE_DIR"); !ok {
+		env = append(env, "PIP_CACHE_DIR="+pipCacheDir)
+	}
+
+	return env, nil
 }
 
 // modelSource represents the source of the model.
