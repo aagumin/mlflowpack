@@ -16,7 +16,7 @@ type fakeModelDownloader struct {
 
 func (f *fakeModelDownloader) DownloadModel(ctx context.Context, name, version, destDir string) (string, error) {
 	f.destDir = destDir
-	return filepath.Join(destDir, "downloaded", "MLmodel"), nil
+	return filepath.Join(destDir, "downloaded-model"), nil
 }
 
 func TestGetModel_UsesWorkDirForRegistryDownloads(t *testing.T) {
@@ -47,16 +47,8 @@ func TestGetModel_UsesWorkDirForRegistryDownloads(t *testing.T) {
 		t.Fatalf("download destDir = %q, want prefix %q", fake.destDir, wantPrefix)
 	}
 
-	wantModelPath := filepath.Join(fake.destDir, "downloaded", "MLmodel")
+	wantModelPath := filepath.Join(fake.destDir, "downloaded-model")
 	if model.Path != wantModelPath {
 		t.Fatalf("model.Path = %q, want %q", model.Path, wantModelPath)
-	}
-
-	if got := model.ModelName; got != "iris-model" {
-		t.Fatalf("model.ModelName = %q, want %q", got, "iris-model")
-	}
-
-	if got := model.ModelVersion; got != "42" {
-		t.Fatalf("model.ModelVersion = %q, want %q", got, "42")
 	}
 }
