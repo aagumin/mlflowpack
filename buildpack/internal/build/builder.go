@@ -97,7 +97,11 @@ func Build(ctx cnb.BuildContext) (cnb.BuildResult, error) {
 	result.Layers[layer.ModelLayerName] = cnb.LayerMetadata{Types: layer.DefaultModelLayerTypes()}
 
 	// Install Python and dependencies using uv
-	installer := python.NewInstaller()
+	uvEnv, err := installerEnv(ctx)
+	if err != nil {
+		return result, fmt.Errorf("configuring uv environment: %w", err)
+	}
+	installer := python.NewInstallerWithPathAndEnv("uv", uvEnv)
 	if err := installer.SetupFromConda(context.Background(), dependencies.conda, pythonPath, venvPath); err != nil {
 		return result, fmt.Errorf("setting up Python: %w", err)
 	}
@@ -143,6 +147,40 @@ func Build(ctx cnb.BuildContext) (cnb.BuildResult, error) {
 	})
 
 	return result, nil
+}
+
+func installerEnv(ctx cnb.BuildContext) ([]string, error) {
+	workRoot, err := WorkDir(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	tmpDir := filepath.Join(workRoot, "tmp")
+	homeDir := filepath.Join(workRoot, "home")
+	uvCacheDir := filepath.Join(workRoot, "cache", "uv")
+	pipCacheDir := filepath.Join(workRoot, "cache", "pip")
+
+	for _, dir := range []string{
+		tmpDir,
+		homeDir,
+		filepath.Join(homeDir, ".cache"),
+		uvCacheDir,
+		pipCacheDir,
+	} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return nil, fmt.Errorf("creating installer env dir %q: %w", dir, err)
+		}
+	}
+
+	return []string{
+		"TMPDIR=" + tmpDir,
+		"TMP=" + tmpDir,
+		"TEMP=" + tmpDir,
+		"HOME=" + homeDir,
+		"XDG_CACHE_HOME=" + filepath.Join(homeDir, ".cache"),
+		"UV_CACHE_DIR=" + uvCacheDir,
+		"PIP_CACHE_DIR=" + pipCacheDir,
+	}, nil
 }
 
 // modelSource represents the source of the model.
