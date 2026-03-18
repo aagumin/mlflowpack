@@ -12,12 +12,10 @@ flavors:
     pickled_model: model.pkl
     serialization_format: cloudpickle
     sklearn_version: 1.7.2
-    skops_trusted_types: null
 is_signature_from_type_hint: false
-mlflow_version: 3.10.1
-model_id: null
+mlflow_version: 2.22.4
 model_size_bytes: 971
-model_uuid: 9c2ddb86994c45c8be969f06893a4b64
+model_uuid: 7f180ce7270b4f719641873671c19a3b
 prompts: null
 saved_input_example_info:
   artifact_path: input_example.json
@@ -30,4 +28,4 @@ signature:
   outputs: '[{"type": "long", "required": true}]'
   params: null
 type_hint_from_example: false
-utc_time_created: '2026-03-10 09:25:06.209301'
+utc_time_created: '2026-03-16 16:39:35.878185'

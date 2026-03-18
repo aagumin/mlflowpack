@@ -10,10 +10,9 @@ flavors:
     python_version: 3.10.18
     streamable: false
 is_signature_from_type_hint: false
-mlflow_version: 3.10.1
-model_id: null
+mlflow_version: 2.22.4
 model_size_bytes: 1769
-model_uuid: 85c95bf9af454ab78bbd61afea1b8ce0
+model_uuid: 02be194a30594cf6bac571bb61b1aa23
 prompts: null
 saved_input_example_info:
   artifact_path: input_example.json
@@ -26,4 +25,4 @@ signature:
   outputs: '[{"type": "double", "name": "sum", "required": true}]'
   params: null
 type_hint_from_example: false
-utc_time_created: '2026-03-10 09:25:04.322719'
+utc_time_created: '2026-03-16 16:39:33.296845'

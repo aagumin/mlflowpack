@@ -464,3 +464,19 @@ env | grep PYTHON
 - [MLServer Documentation](https://mlserver.readthedocs.io/)
 - [MLflow Documentation](https://mlflow.org/docs/latest/index.html)
 - [V2 Inference Protocol](https://github.com/kserve/kserve/blob/master/docs/predict-api/v2/required_api.md)
+
+lima pack build my-registry-model \
+  --env BP_MLFLOW_MODEL_PATH="models:/bert-base-cased-squad/1" \
+  --env DATABRICKS_HOST="asdasd" \
+  --env DATABRICKS_USERNAME="mladmin" \
+  --env DATABRICKS_PASSWORD="asdasd" \
+  --builder aagumin/mlserver-builder:d3c57c8 \
+  --env AWS_ACCESS_KEY_ID="asdas" \
+  --env AWS_SECRET_ACCESS_KEY="sadasd" \
+  --env AWS_ENDPOINT_URL="" \
+  --env AWS_SIGNATURE_VERSION="s3" \
+  --env AWS_ADDRESSING_STYLE="virtual" \
+  --env AWS_REGION="ru-moscow-1" \
+  --pull-policy never \
+  --docker-host=inherit \
+  --trust-builder
