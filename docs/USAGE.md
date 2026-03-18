@@ -235,6 +235,84 @@ pack build my-registry-model \
   --env MLFLOW_TRACKING_PASSWORD="pass"
 ```
 
+## Read-only Filesystem / Single Writable Root
+
+Если вы запускаете buildpack в read-only filesystem, дайте lifecycle и buildpack один writable root и держите все служебные данные внутри него.
+
+### Контракт для operator
+
+Строгая гарантия поддерживается для собственного оператора. Рекомендуемая схема:
+
+```text
+/work
+  /app
+  /layers
+  /platform
+  /cache
+  /launch-cache
+  /tmp
+  /home
+```
+
+Запускайте lifecycle с `CNB_*` путями внутри этого root и отдельным writable mount:
+
+```bash
+CNB_APP_DIR=/work/app \
+CNB_LAYERS_DIR=/work/layers \
+CNB_PLATFORM_DIR=/work/platform \
+CNB_CACHE_DIR=/work/cache \
+CNB_LAUNCH_CACHE_DIR=/work/launch-cache \
+TMPDIR=/work/tmp \
+TMP=/work/tmp \
+TEMP=/work/tmp \
+HOME=/work/home \
+XDG_CACHE_HOME=/work/home/.cache \
+UV_CACHE_DIR=/work/cache/uv \
+PIP_CACHE_DIR=/work/cache/pip \
+UV_PYTHON_INSTALL_DIR=/work/layers/python \
+BP_MLFLOW_WORK_DIR=/work/layers/work
+```
+
+`BP_MLFLOW_WORK_DIR` задаёт внутренний scratch root buildpack. Если переменная не задана, buildpack использует `<layers>/work`.
+
+### Best-effort для pack
+
+`pack` можно использовать как совместимый режим, но без такой же жёсткой гарантии, как у собственного оператора. В этом случае стоит смонтировать один writable root, передать его как `--workspace`, и явно задать служебные переменные:
+
+```bash
+pack build my-model-image \
+  --builder aagumin/mlserver-builder:0.1.0 \
+  --workspace /work/app \
+  --volume "$PWD/.cnb-work:/work:rw" \
+  --cache "type=build;format=bind;source=$PWD/.cnb-work/cache/build" \
+  --cache "type=launch;format=bind;source=$PWD/.cnb-work/cache/launch" \
+  --env TMPDIR=/work/tmp \
+  --env TMP=/work/tmp \
+  --env TEMP=/work/tmp \
+  --env HOME=/work/home \
+  --env XDG_CACHE_HOME=/work/home/.cache \
+  --env UV_CACHE_DIR=/work/cache/uv \
+  --env PIP_CACHE_DIR=/work/cache/pip \
+  --env UV_PYTHON_INSTALL_DIR=/work/layers/python \
+  --env BP_MLFLOW_WORK_DIR=/work/layers/work
+```
+
+### Управляемые переменные
+
+Buildpack и helper-слой используют следующие переменные для переноса всех служебных записей в writable root:
+
+| Переменная | Назначение |
+|------------|------------|
+| `TMPDIR` | Временные файлы для `uv` и других инструментов |
+| `TMP` | Дополнительный Windows/Unix alias для temp |
+| `TEMP` | Дополнительный alias для temp |
+| `HOME` | Домашний каталог для инструментов, которым нужен `~` |
+| `XDG_CACHE_HOME` | Базовый каталог cache для XDG-aware инструментов |
+| `UV_CACHE_DIR` | Cache `uv` |
+| `PIP_CACHE_DIR` | Cache pip |
+| `UV_PYTHON_INSTALL_DIR` | Каталог установки Python, управляемый `uv` |
+| `BP_MLFLOW_WORK_DIR` | Внутренний scratch root buildpack |
+
 ---
 
 ## Конфигурация
