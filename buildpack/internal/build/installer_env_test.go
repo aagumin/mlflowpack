@@ -10,6 +10,7 @@ import (
 
 func TestInstallerEnv_UsesWritableRootDefaults(t *testing.T) {
 	workRoot := filepath.Join(t.TempDir(), "work-root")
+	pythonDir := filepath.Join(t.TempDir(), "python")
 	setEnv(t, "BP_MLFLOW_WORK_DIR", workRoot)
 	unsetEnv(t, "TMPDIR")
 	unsetEnv(t, "TMP")
@@ -18,20 +19,22 @@ func TestInstallerEnv_UsesWritableRootDefaults(t *testing.T) {
 	unsetEnv(t, "XDG_CACHE_HOME")
 	unsetEnv(t, "UV_CACHE_DIR")
 	unsetEnv(t, "PIP_CACHE_DIR")
+	unsetEnv(t, "UV_PYTHON_INSTALL_DIR")
 
-	got, err := installerEnv(cnb.BuildContext{LayersDir: filepath.Join(t.TempDir(), "layers")})
+	got, err := installerEnv(cnb.BuildContext{LayersDir: filepath.Join(t.TempDir(), "layers")}, pythonDir)
 	if err != nil {
 		t.Fatalf("installerEnv() error = %v", err)
 	}
 
 	want := map[string]string{
-		"TMPDIR":         filepath.Join(workRoot, "tmp"),
-		"TMP":            filepath.Join(workRoot, "tmp"),
-		"TEMP":           filepath.Join(workRoot, "tmp"),
-		"HOME":           filepath.Join(workRoot, "home"),
-		"XDG_CACHE_HOME": filepath.Join(workRoot, "home", ".cache"),
-		"UV_CACHE_DIR":   filepath.Join(workRoot, "cache", "uv"),
-		"PIP_CACHE_DIR":  filepath.Join(workRoot, "cache", "pip"),
+		"TMPDIR":                filepath.Join(workRoot, "tmp"),
+		"TMP":                   filepath.Join(workRoot, "tmp"),
+		"TEMP":                  filepath.Join(workRoot, "tmp"),
+		"HOME":                  filepath.Join(workRoot, "home"),
+		"XDG_CACHE_HOME":        filepath.Join(workRoot, "home", ".cache"),
+		"UV_CACHE_DIR":          filepath.Join(workRoot, "cache", "uv"),
+		"PIP_CACHE_DIR":         filepath.Join(workRoot, "cache", "pip"),
+		"UV_PYTHON_INSTALL_DIR": pythonDir,
 	}
 
 	for key, wantValue := range want {
@@ -43,38 +46,68 @@ func TestInstallerEnv_UsesWritableRootDefaults(t *testing.T) {
 
 func TestInstallerEnv_PreservesExplicitParentEnv(t *testing.T) {
 	workRoot := filepath.Join(t.TempDir(), "work-root")
+	pythonDir := filepath.Join(t.TempDir(), "python")
 	setEnv(t, "BP_MLFLOW_WORK_DIR", workRoot)
 
 	values := map[string]string{
-		"TMPDIR":         filepath.Join(t.TempDir(), "parent-tmp"),
-		"TMP":            filepath.Join(t.TempDir(), "parent-tmp"),
-		"TEMP":           filepath.Join(t.TempDir(), "parent-tmp"),
-		"HOME":           filepath.Join(t.TempDir(), "parent-home"),
-		"UV_CACHE_DIR":   filepath.Join(t.TempDir(), "parent-uv-cache"),
-		"PIP_CACHE_DIR":  filepath.Join(t.TempDir(), "parent-pip-cache"),
+		"TMPDIR":                filepath.Join(t.TempDir(), "parent-tmp"),
+		"TMP":                   filepath.Join(t.TempDir(), "parent-tmp"),
+		"TEMP":                  filepath.Join(t.TempDir(), "parent-tmp"),
+		"HOME":                  filepath.Join(t.TempDir(), "parent-home"),
+		"XDG_CACHE_HOME":        filepath.Join(t.TempDir(), "parent-home", ".cache"),
+		"UV_CACHE_DIR":          filepath.Join(t.TempDir(), "parent-uv-cache"),
+		"PIP_CACHE_DIR":         filepath.Join(t.TempDir(), "parent-pip-cache"),
+		"UV_PYTHON_INSTALL_DIR": filepath.Join(t.TempDir(), "parent-python"),
 	}
 	for key, value := range values {
 		setEnv(t, key, value)
 	}
-	unsetEnv(t, "XDG_CACHE_HOME")
 
-	got, err := installerEnv(cnb.BuildContext{LayersDir: filepath.Join(t.TempDir(), "layers")})
+	got, err := installerEnv(cnb.BuildContext{LayersDir: filepath.Join(t.TempDir(), "layers")}, pythonDir)
 	if err != nil {
 		t.Fatalf("installerEnv() error = %v", err)
 	}
 
-	if len(got) != 1 {
-		t.Fatalf("installerEnv() = %v, want exactly one override", got)
-	}
-
-	wantXDG := filepath.Join(values["HOME"], ".cache")
-	if gotValue := lookupEnv(got, "XDG_CACHE_HOME"); gotValue != wantXDG {
-		t.Fatalf("XDG_CACHE_HOME = %q, want %q", gotValue, wantXDG)
+	if len(got) != 0 {
+		t.Fatalf("installerEnv() = %v, want no overrides when parent env is explicit", got)
 	}
 
 	for key, wantValue := range values {
-		if gotValue := lookupEnv(got, key); gotValue != "" {
-			t.Fatalf("%s = %q, want empty override (parent env should win with %q)", key, gotValue, wantValue)
+		if gotValue := os.Getenv(key); gotValue != wantValue {
+			t.Fatalf("%s parent env = %q, want %q", key, gotValue, wantValue)
+		}
+	}
+}
+
+func TestInstallerEnv_UsesWritableRootForEmptyParentEnv(t *testing.T) {
+	workRoot := filepath.Join(t.TempDir(), "work-root")
+	pythonDir := filepath.Join(t.TempDir(), "python")
+	setEnv(t, "BP_MLFLOW_WORK_DIR", workRoot)
+
+	values := []string{"TMPDIR", "TMP", "TEMP", "HOME", "XDG_CACHE_HOME", "UV_CACHE_DIR", "PIP_CACHE_DIR", "UV_PYTHON_INSTALL_DIR"}
+	for _, key := range values {
+		setEnv(t, key, "")
+	}
+
+	got, err := installerEnv(cnb.BuildContext{LayersDir: filepath.Join(t.TempDir(), "layers")}, pythonDir)
+	if err != nil {
+		t.Fatalf("installerEnv() error = %v", err)
+	}
+
+	want := map[string]string{
+		"TMPDIR":                filepath.Join(workRoot, "tmp"),
+		"TMP":                   filepath.Join(workRoot, "tmp"),
+		"TEMP":                  filepath.Join(workRoot, "tmp"),
+		"HOME":                  filepath.Join(workRoot, "home"),
+		"XDG_CACHE_HOME":        filepath.Join(workRoot, "home", ".cache"),
+		"UV_CACHE_DIR":          filepath.Join(workRoot, "cache", "uv"),
+		"PIP_CACHE_DIR":         filepath.Join(workRoot, "cache", "pip"),
+		"UV_PYTHON_INSTALL_DIR": pythonDir,
+	}
+
+	for key, wantValue := range want {
+		if gotValue := lookupEnv(got, key); gotValue != wantValue {
+			t.Fatalf("%s = %q, want %q", key, gotValue, wantValue)
 		}
 	}
 }

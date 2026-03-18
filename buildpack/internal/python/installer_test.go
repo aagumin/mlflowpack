@@ -16,6 +16,7 @@ func TestInstaller_UsesParentEnvWhenNoOverrides(t *testing.T) {
 	t.Setenv("HOME", filepath.Join(t.TempDir(), "parent-home"))
 	t.Setenv("UV_CACHE_DIR", filepath.Join(t.TempDir(), "parent-uv-cache"))
 	t.Setenv("PIP_CACHE_DIR", filepath.Join(t.TempDir(), "parent-pip-cache"))
+	t.Setenv("UV_PYTHON_INSTALL_DIR", filepath.Join(t.TempDir(), "parent-python"))
 	t.Setenv("UV_ENV_DUMP", envDump)
 
 	installer := NewInstallerWithPath(uvPath)
@@ -24,7 +25,7 @@ func TestInstaller_UsesParentEnvWhenNoOverrides(t *testing.T) {
 	}
 
 	got := readEnvDump(t, envDump)
-	wantKeys := []string{"TMPDIR", "HOME", "UV_CACHE_DIR", "PIP_CACHE_DIR"}
+	wantKeys := []string{"TMPDIR", "HOME", "UV_CACHE_DIR", "PIP_CACHE_DIR", "UV_PYTHON_INSTALL_DIR"}
 	for _, key := range wantKeys {
 		if got[key] == "" {
 			t.Fatalf("env %s missing from fake uv environment: %#v", key, got)
@@ -43,6 +44,9 @@ func TestInstaller_UsesParentEnvWhenNoOverrides(t *testing.T) {
 	if got["PIP_CACHE_DIR"] != os.Getenv("PIP_CACHE_DIR") {
 		t.Fatalf("PIP_CACHE_DIR = %q, want %q", got["PIP_CACHE_DIR"], os.Getenv("PIP_CACHE_DIR"))
 	}
+	if got["UV_PYTHON_INSTALL_DIR"] != os.Getenv("UV_PYTHON_INSTALL_DIR") {
+		t.Fatalf("UV_PYTHON_INSTALL_DIR = %q, want %q", got["UV_PYTHON_INSTALL_DIR"], os.Getenv("UV_PYTHON_INSTALL_DIR"))
+	}
 }
 
 func TestInstaller_AppliesExplicitEnvOverrides(t *testing.T) {
@@ -52,6 +56,7 @@ func TestInstaller_AppliesExplicitEnvOverrides(t *testing.T) {
 	t.Setenv("HOME", filepath.Join(t.TempDir(), "parent-home"))
 	t.Setenv("UV_CACHE_DIR", filepath.Join(t.TempDir(), "parent-uv-cache"))
 	t.Setenv("PIP_CACHE_DIR", filepath.Join(t.TempDir(), "parent-pip-cache"))
+	t.Setenv("UV_PYTHON_INSTALL_DIR", filepath.Join(t.TempDir(), "parent-python"))
 	t.Setenv("UV_ENV_DUMP", envDump)
 
 	workRoot := filepath.Join(t.TempDir(), "work-root")
@@ -63,6 +68,7 @@ func TestInstaller_AppliesExplicitEnvOverrides(t *testing.T) {
 		"XDG_CACHE_HOME=" + filepath.Join(workRoot, "home", ".cache"),
 		"UV_CACHE_DIR=" + filepath.Join(workRoot, "cache", "uv"),
 		"PIP_CACHE_DIR=" + filepath.Join(workRoot, "cache", "pip"),
+		"UV_PYTHON_INSTALL_DIR=" + filepath.Join(workRoot, "python"),
 	})
 
 	if err := installer.InstallPython(context.Background(), "3.11", t.TempDir()); err != nil {
@@ -71,13 +77,14 @@ func TestInstaller_AppliesExplicitEnvOverrides(t *testing.T) {
 
 	got := readEnvDump(t, envDump)
 	want := map[string]string{
-		"TMPDIR":         filepath.Join(workRoot, "tmp"),
-		"TMP":            filepath.Join(workRoot, "tmp"),
-		"TEMP":           filepath.Join(workRoot, "tmp"),
-		"HOME":           filepath.Join(workRoot, "home"),
-		"XDG_CACHE_HOME": filepath.Join(workRoot, "home", ".cache"),
-		"UV_CACHE_DIR":   filepath.Join(workRoot, "cache", "uv"),
-		"PIP_CACHE_DIR":  filepath.Join(workRoot, "cache", "pip"),
+		"TMPDIR":                filepath.Join(workRoot, "tmp"),
+		"TMP":                   filepath.Join(workRoot, "tmp"),
+		"TEMP":                  filepath.Join(workRoot, "tmp"),
+		"HOME":                  filepath.Join(workRoot, "home"),
+		"XDG_CACHE_HOME":        filepath.Join(workRoot, "home", ".cache"),
+		"UV_CACHE_DIR":          filepath.Join(workRoot, "cache", "uv"),
+		"PIP_CACHE_DIR":         filepath.Join(workRoot, "cache", "pip"),
+		"UV_PYTHON_INSTALL_DIR": filepath.Join(workRoot, "python"),
 	}
 
 	for key, wantValue := range want {

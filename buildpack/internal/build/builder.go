@@ -97,7 +97,7 @@ func Build(ctx cnb.BuildContext) (cnb.BuildResult, error) {
 	result.Layers[layer.ModelLayerName] = cnb.LayerMetadata{Types: layer.DefaultModelLayerTypes()}
 
 	// Install Python and dependencies using uv
-	uvEnv, err := installerEnv(ctx)
+	uvEnv, err := installerEnv(ctx, pythonPath)
 	if err != nil {
 		return result, fmt.Errorf("configuring uv environment: %w", err)
 	}
@@ -149,7 +149,7 @@ func Build(ctx cnb.BuildContext) (cnb.BuildResult, error) {
 	return result, nil
 }
 
-func installerEnv(ctx cnb.BuildContext) ([]string, error) {
+func installerEnv(ctx cnb.BuildContext, pythonDir string) ([]string, error) {
 	workRoot, err := WorkDir(ctx)
 	if err != nil {
 		return nil, err
@@ -174,32 +174,43 @@ func installerEnv(ctx cnb.BuildContext) ([]string, error) {
 
 	env := make([]string, 0, 7)
 
-	if _, ok := os.LookupEnv("TMPDIR"); !ok {
+	if _, ok := envValue("TMPDIR"); !ok {
 		env = append(env, "TMPDIR="+tmpDir)
 	}
-	if _, ok := os.LookupEnv("TMP"); !ok {
+	if _, ok := envValue("TMP"); !ok {
 		env = append(env, "TMP="+tmpDir)
 	}
-	if _, ok := os.LookupEnv("TEMP"); !ok {
+	if _, ok := envValue("TEMP"); !ok {
 		env = append(env, "TEMP="+tmpDir)
 	}
 
-	homeValue, ok := os.LookupEnv("HOME")
+	homeValue, ok := envValue("HOME")
 	if !ok {
 		homeValue = homeDir
 		env = append(env, "HOME="+homeDir)
 	}
-	if _, ok := os.LookupEnv("XDG_CACHE_HOME"); !ok {
+	if _, ok := envValue("XDG_CACHE_HOME"); !ok {
 		env = append(env, "XDG_CACHE_HOME="+filepath.Join(homeValue, ".cache"))
 	}
-	if _, ok := os.LookupEnv("UV_CACHE_DIR"); !ok {
+	if _, ok := envValue("UV_CACHE_DIR"); !ok {
 		env = append(env, "UV_CACHE_DIR="+uvCacheDir)
 	}
-	if _, ok := os.LookupEnv("PIP_CACHE_DIR"); !ok {
+	if _, ok := envValue("PIP_CACHE_DIR"); !ok {
 		env = append(env, "PIP_CACHE_DIR="+pipCacheDir)
+	}
+	if _, ok := envValue("UV_PYTHON_INSTALL_DIR"); !ok {
+		env = append(env, "UV_PYTHON_INSTALL_DIR="+pythonDir)
 	}
 
 	return env, nil
+}
+
+func envValue(name string) (string, bool) {
+	value, ok := os.LookupEnv(name)
+	if !ok || value == "" {
+		return "", false
+	}
+	return value, true
 }
 
 // modelSource represents the source of the model.
