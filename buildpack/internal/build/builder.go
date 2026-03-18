@@ -158,6 +158,14 @@ type dependencySource struct {
 	requirementsPath string
 }
 
+type modelDownloader interface {
+	DownloadModel(ctx context.Context, name, version, destDir string) (string, error)
+}
+
+var newModelDownloader = func() (modelDownloader, error) {
+	return mlflow.NewDownloader()
+}
+
 func determineModelSource(ctx cnb.BuildContext) (*modelSource, error) {
 	// models:/... in BP_MLFLOW_MODEL_PATH explicitly selects registry source.
 	if name, version, ok, err := detect.DetectFromModelPathEnv(); err != nil {
@@ -214,13 +222,13 @@ func getModel(ctx cnb.BuildContext, source *modelSource) (*mlflow.Model, error) 
 	// S3 credentials are read from AWS_* env vars or ~/.aws/* files
 
 	// Create temp directory for download
-	tempDir, err := os.MkdirTemp("", "mlflow-model-")
+	tempDir, err := TempDir(ctx, "mlflow-model-")
 	if err != nil {
 		return nil, fmt.Errorf("creating temp directory: %w", err)
 	}
 
 	// Use modctl-based downloader
-	downloader, err := mlflow.NewDownloader()
+	downloader, err := newModelDownloader()
 	if err != nil {
 		if removeErr := os.RemoveAll(tempDir); removeErr != nil {
 			return nil, errors.Join(fmt.Errorf("creating downloader: %w", err), fmt.Errorf("cleanup temp dir: %w", removeErr))
