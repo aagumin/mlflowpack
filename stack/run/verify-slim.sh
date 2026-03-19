@@ -19,7 +19,7 @@ if ! grep -qx "home/cnb/" <<<"${archive_listing}"; then
 fi
 
 passwd_contents="$(docker export "${container_id}" | tar -xOf - etc/passwd)"
-if ! grep -q '^cnb:x:1000:1000:' <<<"${passwd_contents}"; then
+if ! grep -q '^cnb:x:1001:1001:' <<<"${passwd_contents}"; then
   echo "expected cnb passwd entry missing" >&2
   exit 1
 fi

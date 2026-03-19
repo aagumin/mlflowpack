@@ -6,8 +6,8 @@ FROM quay.io/fedora/fedora-minimal:43
 # dependencies are provided by buildpack launch layers.
 
 # CNB user setup (required for buildpack API 0.12)
-ARG cnb_uid=1000
-ARG cnb_gid=1000
+ARG cnb_uid=1001
+ARG cnb_gid=1001
 ENV CNB_USER_ID=${cnb_uid}
 ENV CNB_GROUP_ID=${cnb_gid}
 ENV HOME=/home/cnb

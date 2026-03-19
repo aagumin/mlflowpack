@@ -20,8 +20,8 @@ RUN dnf install -y uv && \
     dnf clean all
 
 # CNB user setup (required for buildpack API 0.12)
-ARG cnb_uid=1000
-ARG cnb_gid=1000
+ARG cnb_uid=1001
+ARG cnb_gid=1001
 ENV CNB_USER_ID=${cnb_uid}
 ENV CNB_GROUP_ID=${cnb_gid}
 
