@@ -534,6 +534,43 @@ env | grep PYTHON
 
 ---
 
+## Release Process
+
+Создание нового тега триггерит автоматическую публикацию образов в GitHub Container Registry (ghcr.io).
+
+```bash
+# Создать и запушить тег
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+### Публикуемые образы
+
+| Образ | Теги |
+|-------|------|
+| `ghcr.io/aagumin/fedora-mlserver-build` | `VERSION`, `latest` (только stable) |
+| `ghcr.io/aagumin/fedora-mlserver-run` | `VERSION`, `latest` (только stable) |
+| `ghcr.io/aagumin/mlserver-builder` | `VERSION`, `latest` (только stable) |
+
+### Pre-release версии
+
+Теги вида `v1.0.0-beta.1` или `v1.0.0-rc.2` публикуются без тега `latest`.
+
+### Использование готового builder
+
+```bash
+# Stable версия
+pack builder pull ghcr.io/aagumin/mlserver-builder:latest
+
+# Конкретная версия
+pack builder pull ghcr.io/aagumin/mlserver-builder:1.0.0
+
+# Pre-release
+pack builder pull ghcr.io/aagumin/mlserver-builder:1.0.0-beta.1
+```
+
+---
+
 ## Ссылки
 
 - [Cloud Native Buildpacks](https://buildpacks.io/)
