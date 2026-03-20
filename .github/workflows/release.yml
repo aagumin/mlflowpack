@@ -94,3 +94,54 @@ jobs:
 
       - name: Push run image
         run: docker push ${{ env.REGISTRY }}/${{ github.repository_owner }}/fedora-mlserver-run:${{ needs.build-image.outputs.version }}
+
+  builder-image:
+    needs: [build-image, run-image]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Pack CLI
+        uses: buildpacks/github-actions/setup-pack@v5
+
+      - name: Package buildpack
+        run: |
+          make build
+          pack buildpack package io.github.aagumin.mlflow-model:${{ needs.build-image.outputs.version }} \
+            --config buildpack/package.toml \
+            --force-color
+
+      - name: Prepare builder config for ghcr.io
+        run: |
+          sed -i.bak \
+            -e "s|aagumin/fedora-mlserver-run:43|${{ env.REGISTRY }}/${{ github.repository_owner }}/fedora-mlserver-run:${{ needs.build-image.outputs.version }}|g" \
+            -e "s|aagumin/fedora-mlserver-build:43|${{ env.REGISTRY }}/${{ github.repository_owner }}/fedora-mlserver-build:${{ needs.build-image.outputs.version }}|g" \
+            builder.toml
+
+      - name: Create builder
+        run: |
+          pack builder create ${{ env.REGISTRY }}/${{ github.repository_owner }}/mlserver-builder:${{ needs.build-image.outputs.version }} \
+            --config builder.toml \
+            --pull-policy never \
+            --verbose
+
+      - name: Push builder image
+        run: docker push ${{ env.REGISTRY }}/${{ github.repository_owner }}/mlserver-builder:${{ needs.build-image.outputs.version }}
+
+      - name: Tag and push latest for stable release
+        if: needs.build-image.outputs.is_stable == 'true'
+        run: |
+          docker tag ${{ env.REGISTRY }}/${{ github.repository_owner }}/mlserver-builder:${{ needs.build-image.outputs.version }} \
+            ${{ env.REGISTRY }}/${{ github.repository_owner }}/mlserver-builder:latest
+          docker push ${{ env.REGISTRY }}/${{ github.repository_owner }}/mlserver-builder:latest
