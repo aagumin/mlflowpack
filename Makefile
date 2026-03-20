@@ -4,6 +4,12 @@ BUILDPACK_ID := io.github.aagumin.mlflow-model
 VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "0.1.0")
 TIMEOUT ?= 600
 
+# Registry configuration (override for ghcr.io)
+REGISTRY ?= docker.io
+IMAGE_PREFIX ?= aagumin
+BUILD_IMAGE_TAG ?= 43
+RUN_IMAGE_TAG ?= 43
+
 # Detect OS
 UNAME_S := $(shell uname -s)
 
@@ -47,10 +53,10 @@ package: build
 # ============================================================
 
 stack-build:
-	$(CONTAINER_TOOL) build -t aagumin/fedora-mlserver-build:43 stack/build
+	$(CONTAINER_TOOL) build -t $(REGISTRY)/$(IMAGE_PREFIX)/fedora-mlserver-build:$(BUILD_IMAGE_TAG) stack/build
 
 stack-run:
-	$(CONTAINER_TOOL) build -t aagumin/fedora-mlserver-run:43 stack/run
+	$(CONTAINER_TOOL) build -t $(REGISTRY)/$(IMAGE_PREFIX)/fedora-mlserver-run:$(RUN_IMAGE_TAG) stack/run
 
 stack: stack-build stack-run
 
