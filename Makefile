@@ -9,6 +9,7 @@ REGISTRY ?= docker.io
 IMAGE_PREFIX ?= aagumin
 BUILD_IMAGE_TAG ?= 43
 RUN_IMAGE_TAG ?= 43
+BUILDER_IMAGE ?= $(REGISTRY)/$(IMAGE_PREFIX)/mlserver-builder:$(VERSION)
 
 # Detect OS
 UNAME_S := $(shell uname -s)
@@ -63,9 +64,17 @@ stack: stack-build stack-run
 # Builder (modern approach without deprecated stack)
 # ============================================================
 
-builder: stack package
-	$(PACK) builder create aagumin/mlserver-builder:${VERSION} \
-		--config builder.toml \
+# Generate builder config from template
+builder.generated.toml: builder.toml.template
+	sed -e 's|{{REGISTRY}}|$(REGISTRY)|g' \
+	    -e 's|{{IMAGE_PREFIX}}|$(IMAGE_PREFIX)|g' \
+	    -e 's|{{BUILD_IMAGE_TAG}}|$(BUILD_IMAGE_TAG)|g' \
+	    -e 's|{{RUN_IMAGE_TAG}}|$(RUN_IMAGE_TAG)|g' \
+	    $< > $@
+
+builder: stack package builder.generated.toml
+	$(PACK) builder create $(BUILDER_IMAGE) \
+		--config builder.generated.toml \
 		--pull-policy never \
 		--verbose
 
@@ -94,3 +103,4 @@ clean:
 	rm -rf buildpack/bin/linux-amd64
 	rm -rf buildpack/bin/linux-arm64
 	rm -rf out/
+	rm -f builder.generated.toml

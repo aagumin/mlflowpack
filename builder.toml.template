@@ -1,0 +1,21 @@
+# Builder configuration for MLflow Model Buildpack
+# https://buildpacks.io/docs/reference/builder-config/
+#
+# This is a template. Use: make builder (generates builder.generated.toml)
+
+description = "Builder for MLflow models with MLServer runtime"
+
+[[buildpacks]]
+uri = "buildpack/"
+
+[[order]]
+[[order.group]]
+id = "io.github.aagumin.mlflow-model"
+
+# Build image - used during build phase
+[build]
+image = "{{REGISTRY}}/{{IMAGE_PREFIX}}/fedora-mlserver-build:{{BUILD_IMAGE_TAG}}"
+
+# Run images - used during run phase
+[[run.images]]
+image = "{{REGISTRY}}/{{IMAGE_PREFIX}}/fedora-mlserver-run:{{RUN_IMAGE_TAG}}"

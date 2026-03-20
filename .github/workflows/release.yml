@@ -3,8 +3,8 @@ name: Release
 on:
   push:
     tags:
-      - 'v[0-9]+.[0-9]+.[0-9]+'
-      - 'v[0-9]+.[0-9]+.[0-9]+-*'
+      - "v[0-9]+.[0-9]+.[0-9]+"
+      - "v[0-9]+.[0-9]+.[0-9]+-*"
 
 permissions:
   contents: read
@@ -115,26 +115,14 @@ jobs:
       - name: Setup Pack CLI
         uses: buildpacks/github-actions/setup-pack@v5.1.0
 
-      - name: Package buildpack
-        run: |
-          make build
-          pack buildpack package io.github.aagumin.mlflow-model:${{ needs.build-image.outputs.version }} \
-            --config buildpack/package.toml \
-            --force-color
-
-      - name: Prepare builder config for ghcr.io
-        run: |
-          sed -i.bak \
-            -e "s|aagumin/fedora-mlserver-run:43|${{ env.REGISTRY }}/${{ github.repository_owner }}/fedora-mlserver-run:${{ needs.build-image.outputs.version }}|g" \
-            -e "s|aagumin/fedora-mlserver-build:43|${{ env.REGISTRY }}/${{ github.repository_owner }}/fedora-mlserver-build:${{ needs.build-image.outputs.version }}|g" \
-            builder.toml
-
       - name: Create builder
         run: |
-          pack builder create ${{ env.REGISTRY }}/${{ github.repository_owner }}/mlserver-builder:${{ needs.build-image.outputs.version }} \
-            --config builder.toml \
-            --pull-policy never \
-            --verbose
+          make builder \
+            REGISTRY=${{ env.REGISTRY }} \
+            IMAGE_PREFIX=${{ github.repository_owner }} \
+            BUILD_IMAGE_TAG=${{ needs.build-image.outputs.version }} \
+            RUN_IMAGE_TAG=${{ needs.build-image.outputs.version }} \
+            BUILDER_IMAGE=${{ env.REGISTRY }}/${{ github.repository_owner }}/mlserver-builder:${{ needs.build-image.outputs.version }}
 
       - name: Push builder image
         run: docker push ${{ env.REGISTRY }}/${{ github.repository_owner }}/mlserver-builder:${{ needs.build-image.outputs.version }}
