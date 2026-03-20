@@ -45,7 +45,6 @@ package: build
 	$(PACK) buildpack package ${BUILDPACK_ID} \
 		--config buildpack/package.toml \
 		--tag ${BUILDPACK_ID}:${VERSION} \
-		--force-color \
 		--verbose 
 
 # ============================================================
