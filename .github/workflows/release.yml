@@ -60,3 +60,37 @@ jobs:
 
       - name: Push build image
         run: docker push ${{ env.REGISTRY }}/${{ github.repository_owner }}/fedora-mlserver-build:${{ steps.version.outputs.VERSION }}
+
+  run-image:
+    needs: build-image
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push run image
+        run: |
+          make stack-run \
+            REGISTRY=${{ env.REGISTRY }} \
+            IMAGE_PREFIX=${{ github.repository_owner }} \
+            RUN_IMAGE_TAG=${{ needs.build-image.outputs.version }}
+
+      - name: Tag latest for stable release
+        if: needs.build-image.outputs.is_stable == 'true'
+        run: |
+          docker tag ${{ env.REGISTRY }}/${{ github.repository_owner }}/fedora-mlserver-run:${{ needs.build-image.outputs.version }} \
+            ${{ env.REGISTRY }}/${{ github.repository_owner }}/fedora-mlserver-run:latest
+          docker push ${{ env.REGISTRY }}/${{ github.repository_owner }}/fedora-mlserver-run:latest
+
+      - name: Push run image
+        run: docker push ${{ env.REGISTRY }}/${{ github.repository_owner }}/fedora-mlserver-run:${{ needs.build-image.outputs.version }}
