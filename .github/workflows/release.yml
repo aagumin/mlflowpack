@@ -14,3 +14,49 @@ env:
   REGISTRY: ghcr.io
 
 jobs:
+  build-image:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.VERSION }}
+      is_stable: ${{ steps.stable.outputs.IS_STABLE }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Get version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Check if stable release
+        id: stable
+        run: |
+          if [[ ! "${{ steps.version.outputs.VERSION }}" =~ -(beta|rc|alpha|pre) ]]; then
+            echo "IS_STABLE=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push build image
+        run: |
+          make stack-build \
+            REGISTRY=${{ env.REGISTRY }} \
+            IMAGE_PREFIX=${{ github.repository_owner }} \
+            BUILD_IMAGE_TAG=${{ steps.version.outputs.VERSION }}
+
+      - name: Tag latest for stable release
+        if: steps.stable.outputs.IS_STABLE == 'true'
+        run: |
+          docker tag ${{ env.REGISTRY }}/${{ github.repository_owner }}/fedora-mlserver-build:${{ steps.version.outputs.VERSION }} \
+            ${{ env.REGISTRY }}/${{ github.repository_owner }}/fedora-mlserver-build:latest
+          docker push ${{ env.REGISTRY }}/${{ github.repository_owner }}/fedora-mlserver-build:latest
+
+      - name: Push build image
+        run: docker push ${{ env.REGISTRY }}/${{ github.repository_owner }}/fedora-mlserver-build:${{ steps.version.outputs.VERSION }}
