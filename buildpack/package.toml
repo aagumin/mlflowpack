@@ -4,3 +4,7 @@ uri = "."
 [[targets]]
 os = "linux"
 arch = "amd64"
+
+[[targets]]
+os = "linux"
+arch = "arm64"
