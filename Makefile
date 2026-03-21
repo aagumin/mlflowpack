@@ -1,4 +1,4 @@
-.PHONY: all build test lint clean package stack-build stack-run stack builder e2e e2e-build e2e-runtime e2e-models
+.PHONY: all build test lint clean package stack-build stack-run stack builder builders manifest push-builders e2e e2e-build e2e-runtime e2e-models
 
 BUILDPACK_ID := io.github.aagumin.mlflow-model
 VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "0.1.0")
@@ -83,11 +83,30 @@ builder.generated.toml: builder.toml.template
 	    -e 's|{{RUN_IMAGE_TAG}}|$(RUN_IMAGE_TAG)|g' \
 	    $< > $@
 
-builder: stack package builder.generated.toml
-	$(PACK) builder create $(BUILDER_IMAGE) \
-		--config builder.generated.toml \
+# Create builder for specific architecture
+builder-%: builder.generated.toml
+	$(PACK) builder create $(BUILDER_IMAGE)-$* \
+		--config $< \
 		--pull-policy never \
 		--verbose
+
+# Create builders for all architectures
+builders: $(foreach arch,$(BUILDER_ARCHS),builder-$(arch))
+
+# Create manifest list from architecture-specific builders
+manifest: builders
+	docker manifest create $(BUILDER_IMAGE) \
+		$(foreach arch,$(BUILDER_ARCHS),$(BUILDER_IMAGE)-$(arch))
+
+# Push all architecture-specific builders
+push-builders: manifest
+	@for arch in $(BUILDER_ARCHS); do \
+		docker push $(BUILDER_IMAGE)-$$arch; \
+	done
+	docker manifest push $(BUILDER_IMAGE)
+
+# Full builder cycle: stack + package + builders + manifest
+builder: stack package manifest
 
 # ============================================================
 # Development targets
