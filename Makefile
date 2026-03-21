@@ -32,17 +32,17 @@ all: build
 build:
 	@echo "Building buildpack binaries for amd64 and arm64..."
 	mkdir -p buildpack/bin/linux-amd64
-	cd buildpack && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o bin/linux-amd64/detect ./cmd/detect
-	cd buildpack && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o bin/linux-amd64/build ./cmd/build
+	cd buildpack && GOSUMDB=sum.golang.org CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o bin/linux-amd64/detect ./cmd/detect
+	cd buildpack && GOSUMDB=sum.golang.org CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o bin/linux-amd64/build ./cmd/build
 	mkdir -p buildpack/bin/linux-arm64
-	cd buildpack && CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -o bin/linux-arm64/detect ./cmd/detect
-	cd buildpack && CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -o bin/linux-arm64/build ./cmd/build
+	cd buildpack && GOSUMDB=sum.golang.org CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -o bin/linux-arm64/detect ./cmd/detect
+	cd buildpack && GOSUMDB=sum.golang.org CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -o bin/linux-arm64/build ./cmd/build
 	chmod +x buildpack/bin/linux-amd64/detect buildpack/bin/linux-amd64/build
 	chmod +x buildpack/bin/linux-arm64/detect buildpack/bin/linux-arm64/build
 
 test:
-	cd buildpack && GOCACHE=/tmp/aipack-go-cache go test -v ./...
-	cd buildpack && GOCACHE=/tmp/aipack-go-cache go test -v -race ./internal/...
+	cd buildpack && GOSUMDB=sum.golang.org GOCACHE=/tmp/aipack-go-cache go test -v ./...
+	cd buildpack && GOSUMDB=sum.golang.org GOCACHE=/tmp/aipack-go-cache go test -v -race ./internal/...
 
 lint:
 	cd buildpack && GOSUMDB=sum.golang.org golangci-lint run ./...
