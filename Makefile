@@ -58,10 +58,16 @@ package: build
 # ============================================================
 
 stack-build:
-	$(CONTAINER_TOOL) build -t $(REGISTRY)/$(IMAGE_PREFIX)/fedora-mlserver-build:$(BUILD_IMAGE_TAG) stack/build
+	docker buildx build --push \
+		--platform $(PLATFORMS) \
+		-t $(REGISTRY)/$(IMAGE_PREFIX)/fedora-mlserver-build:$(BUILD_IMAGE_TAG) \
+		stack/build
 
 stack-run:
-	$(CONTAINER_TOOL) build -t $(REGISTRY)/$(IMAGE_PREFIX)/fedora-mlserver-run:$(RUN_IMAGE_TAG) stack/run
+	docker buildx build --push \
+		--platform $(PLATFORMS) \
+		-t $(REGISTRY)/$(IMAGE_PREFIX)/fedora-mlserver-run:$(RUN_IMAGE_TAG) \
+		stack/run
 
 stack: stack-build stack-run
 
