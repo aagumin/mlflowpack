@@ -11,6 +11,10 @@ BUILD_IMAGE_TAG ?= 43
 RUN_IMAGE_TAG ?= 43
 BUILDER_IMAGE ?= $(REGISTRY)/$(IMAGE_PREFIX)/mlserver-builder:$(VERSION)
 
+# Multi-platform configuration
+PLATFORMS ?= linux/amd64,linux/arm64
+BUILDER_ARCHS := $(subst linux/,,$(PLATFORMS))
+
 # Detect OS
 UNAME_S := $(shell uname -s)
 
