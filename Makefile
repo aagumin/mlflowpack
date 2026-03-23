@@ -22,9 +22,11 @@ UNAME_S := $(shell uname -s)
 ifeq ($(UNAME_S),Darwin)
 	PACK := lima pack
 	CONTAINER_TOOL ?= docker
+	DOCKER ?= lima docker
 else
 	PACK := pack
 	CONTAINER_TOOL ?= docker
+	DOCKER ?= docker
 endif
 
 all: build
@@ -58,13 +60,13 @@ package: build
 # ============================================================
 
 stack-build:
-	docker buildx build --push \
+	$(DOCKER) buildx build --push \
 		--platform $(PLATFORMS) \
 		-t $(REGISTRY)/$(IMAGE_PREFIX)/fedora-mlserver-build:$(BUILD_IMAGE_TAG) \
 		stack/build
 
 stack-run:
-	docker buildx build --push \
+	$(DOCKER) buildx build --push \
 		--platform $(PLATFORMS) \
 		-t $(REGISTRY)/$(IMAGE_PREFIX)/fedora-mlserver-run:$(RUN_IMAGE_TAG) \
 		stack/run
@@ -95,15 +97,15 @@ builders: $(foreach arch,$(BUILDER_ARCHS),builder-$(arch))
 
 # Create manifest list from architecture-specific builders
 manifest: builders
-	docker manifest create $(BUILDER_IMAGE) \
+	$(DOCKER) manifest create $(BUILDER_IMAGE) \
 		$(foreach arch,$(BUILDER_ARCHS),$(BUILDER_IMAGE)-$(arch))
 
 # Push all architecture-specific builders
 push-builders: manifest
 	@for arch in $(BUILDER_ARCHS); do \
-		docker push $(BUILDER_IMAGE)-$$arch; \
+		$(DOCKER) push $(BUILDER_IMAGE)-$$arch; \
 	done
-	docker manifest push $(BUILDER_IMAGE)
+	$(DOCKER) manifest push $(BUILDER_IMAGE)
 
 # Full builder cycle: stack + package + builders + manifest
 builder: stack package manifest
