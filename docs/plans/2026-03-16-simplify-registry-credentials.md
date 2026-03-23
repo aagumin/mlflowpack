@@ -218,18 +218,6 @@ pack build my-model \
 ### Полная команда сборки
 
 ```bash
-# macOS с Lima
-lima pack build my-registry-model \
-  --builder aagumin/mlserver-builder:0.1.0 \
-  --env BP_MLFLOW_MODEL_PATH="models:/my-classifier/1" \
-  --env MLFLOW_TRACKING_URI="https://mlflow.company.com" \
-  --env MLFLOW_TRACKING_USERNAME="user" \
-  --env MLFLOW_TRACKING_PASSWORD="pass" \
-  --pull-policy never \
-  --docker-host=inherit \
-  --trust-builder
-
-# Linux
 pack build my-registry-model \
   --builder aagumin/mlserver-builder:0.1.0 \
   --env BP_MLFLOW_MODEL_PATH="models:/my-classifier/1" \

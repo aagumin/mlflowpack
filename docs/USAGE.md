@@ -21,7 +21,6 @@
 |------------|--------|------------|
 | pack | >= 0.38.0 | CLI для работы с buildpacks |
 | Docker или Podman | любой | Container runtime |
-| Lima | любой | Docker на macOS (опционально) |
 
 ### Установка pack
 
@@ -37,20 +36,6 @@ sudo apt-get update && sudo apt-get install -y pack
 
 # Или скачать бинарник
 (curl -sSL "https://github.com/buildpacks/pack/releases/download/v0.38.2/pack-v0.38.2-linux-$(uname -m | sed 's/x86_64/amd64/').tgz" | sudo tar -C /usr/local/bin/ --no-same-owner -xz pack)
-```
-
-### Lima на macOS (Опционально)
-
-```bash
-# Установка Lima
-brew install lima
-
-# Создать VM с Docker
-limactl start template://docker
-
-# Использовать lima prefix для docker и pack
-lima docker ps
-lima pack --version
 ```
 
 ### Получение builder
@@ -83,17 +68,6 @@ my-model/
 └── requirements.txt
 ```
 
-**macOS с Lima:**
-```bash
-lima pack build my-model-image \
-  --builder aagumin/mlserver-builder:0.1.0 \
-  --path my-model \
-  --pull-policy never \
-  --docker-host=inherit \
-  --trust-builder
-```
-
-**Linux:**
 ```bash
 pack build my-model-image \
   --builder aagumin/mlserver-builder:0.1.0 \
@@ -215,18 +189,6 @@ pack build my-model \
 ### Полная команда сборки
 
 ```bash
-# macOS с Lima
-lima pack build my-registry-model \
-  --builder aagumin/mlserver-builder:0.1.0 \
-  --env BP_MLFLOW_MODEL_PATH="models:/my-classifier/1" \
-  --env MLFLOW_TRACKING_URI="https://mlflow.company.com" \
-  --env MLFLOW_TRACKING_USERNAME="user" \
-  --env MLFLOW_TRACKING_PASSWORD="pass" \
-  --pull-policy never \
-  --docker-host=inherit \
-  --trust-builder
-
-# Linux
 pack build my-registry-model \
   --builder aagumin/mlserver-builder:0.1.0 \
   --env BP_MLFLOW_MODEL_PATH="models:/my-classifier/1" \
@@ -508,13 +470,10 @@ spec:
 ### Включение debug логов
 
 ```bash
-lima pack build my-model \
+pack build my-model \
   --builder aagumin/mlserver-builder:0.1.0 \
   --path my-model \
   --env CNB_LOG_LEVEL=debug \
-  --pull-policy never \
-  --docker-host=inherit \
-  --trust-builder \
   -v
 ```
 
@@ -577,19 +536,3 @@ pack builder pull ghcr.io/aagumin/mlserver-builder:1.0.0-beta.1
 - [MLServer Documentation](https://mlserver.readthedocs.io/)
 - [MLflow Documentation](https://mlflow.org/docs/latest/index.html)
 - [V2 Inference Protocol](https://github.com/kserve/kserve/blob/master/docs/predict-api/v2/required_api.md)
-
-lima pack build my-registry-model \
-  --env BP_MLFLOW_MODEL_PATH="models:/bert-base-cased-squad/1" \
-  --env DATABRICKS_HOST="asdasd" \
-  --env DATABRICKS_USERNAME="mladmin" \
-  --env DATABRICKS_PASSWORD="asdasd" \
-  --builder aagumin/mlserver-builder:d3c57c8 \
-  --env AWS_ACCESS_KEY_ID="asdas" \
-  --env AWS_SECRET_ACCESS_KEY="sadasd" \
-  --env AWS_ENDPOINT_URL="" \
-  --env AWS_SIGNATURE_VERSION="s3" \
-  --env AWS_ADDRESSING_STYLE="virtual" \
-  --env AWS_REGION="ru-moscow-1" \
-  --pull-policy never \
-  --docker-host=inherit \
-  --trust-builder

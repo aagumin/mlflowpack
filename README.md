@@ -8,7 +8,7 @@ CNCF Buildpack для сборки container-образов с ML моделям
 - **MLServer runtime** — использует Seldon MLServer для инференса
 - **Автоопределение flavor** — автоматически выбирает нужный MLServer extension
 - **Быстрая установка зависимостей** — использует uv вместо pip
-- **Поддержка macOS** — работает с Lima + Docker
+- **Multi-architecture** — поддерживает linux/amd64 и linux/arm64
 
 ## Поддерживаемые модели
 
@@ -25,69 +25,95 @@ CNCF Buildpack для сборки container-образов с ML моделям
 
 ### Предварительные требования
 
-- [pack](https://buildpacks.io/docs/tools/pack/) >= 0.38.0
-- Docker или Podman
-- Go >= 1.24 (для разработки)
-- Lima (на macOS)
+| Инструмент | Версия | Назначение |
+|------------|--------|------------|
+| [pack](https://buildpacks.io/docs/tools/pack/) | >= 0.38.0 | CLI для работы с buildpacks |
+| Docker или Podman | любой | Container runtime |
+| Go | >= 1.24 | Для разработки buildpack |
 
 ### Установка
 
 ```bash
 # macOS
-brew install pack lima
+brew install pack
 
 # Linux
 # pack: https://buildpacks.io/docs/tools/pack/
+# Go: https://go.dev/doc/install
 ```
 
-### Локальная сборка
+## Локальная сборка buildpack
 
 ```bash
 # Клонировать репозиторий
 git clone https://github.com/aagumin/mlflowpack.git
 cd mlflowpack
 
-# Собрать builder
+# Собрать builder (stack images + buildpack package + builder)
 make builder
 
-# Прогнать локальные e2e проверки (pyfunc + sklearn модели)
-make e2e
+# Или пошагово:
+make build     # Скомпилировать buildpack binaries (amd64 + arm64)
+make test      # Запустить unit тесты
+make stack     # Собрать stack images (multi-arch)
+make package   # Упаковать buildpack
+make builder   # Создать builder image
+```
 
-# Запустить
-docker run -p 8080:8080 -e MLSERVER_PARALLEL_WORKERS=0 aipack-e2e-sklearn:local
+## Сборка образа с моделью
+
+### Вариант 1: Локальная модель
+
+```bash
+pack build my-model-image \
+  --builder aagumin/mlserver-builder:$(git describe --tags --always) \
+  --path path/to/model
+```
+
+### Вариант 2: Модель из MLflow Registry
+
+```bash
+pack build my-model-image \
+  --builder aagumin/mlserver-builder:$(git describe --tags --always) \
+  --env BP_MLFLOW_MODEL_PATH="models:/my-classifier/1" \
+  --env MLFLOW_TRACKING_URI="https://mlflow.example.com" \
+  --env MLFLOW_TRACKING_USERNAME="user" \
+  --env MLFLOW_TRACKING_PASSWORD="pass"
+```
+
+### Запуск и тест
+
+```bash
+# Запустить контейнер
+docker run --rm -p 8080:8080 -e MLSERVER_PARALLEL_WORKERS=0 my-model-image
+
+# Проверить readiness
+curl http://localhost:8080/v2/health/ready
 
 # Тест инференса
 curl -X POST http://localhost:8080/v2/models/model/infer \
   -H "Content-Type: application/json" \
-  -d @e2e/models/sklearn/test-request.json
+  -d '{"inputs": [{"name": "input", "shape": [1, 4], "datatype": "FP32", "data": [[5.1, 3.5, 1.4, 0.2]]}]}'
 ```
 
-### Сборка с моделью из MLflow Registry
+### E2E тестирование
 
 ```bash
-# Создать service bindings
-mkdir -p bindings/mlflow
-echo "mlflow" > bindings/mlflow/type
-echo "https://mlflow.example.com" > bindings/mlflow/tracking_uri
+# Полный e2e цикл (pyfunc + sklearn модели)
+make e2e
 
-# Собрать
-lima pack build my-model \
-  --builder aagumin/mlserver-builder:<version> \
-  --env BP_MLFLOW_MODEL_NAME=my-classifier \
-  --env BP_MLFLOW_MODEL_VERSION=latest \
-  --volume ./bindings:/bindings/mlflow \
-  --pull-policy never \
-  --docker-host=inherit \
-  --trust-builder
+# Или вручную
+./e2e/scripts/verify-build.sh sklearn
+./e2e/scripts/verify-runtime.sh sklearn
 ```
 
 ## Команды Makefile
 
 ```bash
-make build     # Собрать buildpack binaries
+make build     # Собрать buildpack binaries (amd64 + arm64)
 make test      # Запустить unit тесты
 make lint      # Запустить linter
-make stack     # Собрать stack images
+make stack     # Собрать stack images (multi-arch)
 make package   # Упаковать buildpack
 make builder   # Создать builder (stack + package)
 make e2e       # Build+runtime проверки e2e моделей
@@ -104,8 +130,8 @@ make e2e       # Build+runtime проверки e2e моделей
 | `BP_MLFLOW_MODEL_STAGE` | Stage модели (Production, Staging) | — |
 | `BP_MLFLOW_MODEL_PATH` | Локальный путь к модели ИЛИ `models:/<name>[/<version-or-stage>]` для Registry | auto-detect |
 
-Если `BP_MLFLOW_MODEL_PATH` начинается с `models:/`, buildpack скачивает модель из Registry.  
-Иначе локальная модель определяется автоматически по `MLmodel` (корень или рекурсивный поиск).  
+Если `BP_MLFLOW_MODEL_PATH` начинается с `models:/`, buildpack скачивает модель из Registry.
+Иначе локальная модель определяется автоматически по `MLmodel` (корень или рекурсивный поиск).
 Если найдено несколько `MLmodel`, укажите `BP_MLFLOW_MODEL_PATH`.
 
 ### Service Bindings

@@ -59,9 +59,9 @@ make lint
 
 ### Предварительные требования
 
-- **Go** >= 1.21
+- **Go** >= 1.24
 - **Docker** или **Podman**
-- **pack** CLI >= 0.30.0
+- **pack** CLI >= 0.38.0
 - **Make** (опционально, но рекомендуется)
 
 ### Установка инструментов
@@ -136,12 +136,9 @@ make builder
 
 ```bash
 # Сборка тестового образа
-lima pack build test-mlflow-model \
+pack build test-mlflow-model \
   --builder aagumin/mlserver-builder:<version> \
-  --path test-model \
-  --pull-policy never \
-  --docker-host=inherit \
-  --trust-builder
+  --path test-model
 
 # Запуск контейнера
 docker run --rm -p 8080:8080 -e MLSERVER_PARALLEL_WORKERS=0 test-mlflow-model:latest

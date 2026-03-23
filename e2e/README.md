@@ -9,7 +9,7 @@
 ## Prerequisites
 
 - Builder image created locally (`make builder`)
-- `pack` (or `lima pack` on macOS)
+- `pack` CLI
 - Docker (or alternative container runtime via `CONTAINER_TOOL`)
 - `curl`
 - `python3`
@@ -40,7 +40,7 @@ Artifacts are committed to git to keep e2e checks reproducible.
 ## Environment overrides
 
 - `BUILDER_IMAGE` - builder to use (default: `aagumin/mlserver-builder:<git-describe>`)
-- `PACK_CMD` - override pack command (example: `PACK_CMD='lima pack'`)
+- `PACK_CMD` - override pack command
 - `CONTAINER_TOOL` - container runtime command (default: `docker`)
 - `IMAGE_PREFIX` / `IMAGE_SUFFIX` - output image tag customization
 - `E2E_PORT` - force runtime check port
