@@ -87,7 +87,7 @@ builder.generated.toml: builder.toml.template
 builder-%: builder.generated.toml
 	$(PACK) builder create $(BUILDER_IMAGE)-$* \
 		--config $< \
-		--pull-policy never \
+		--pull-policy if-not-present \
 		--verbose
 
 # Create builders for all architectures
