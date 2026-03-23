@@ -62,35 +62,45 @@ make builder   # Создать builder image
 
 ## Сборка образа с моделью
 
-### Вариант 1: Локальная модель
+### Вариант 1: Локальная модель (e2e пример)
 
 ```bash
-pack build my-model-image \
-  --builder aagumin/mlserver-builder:$(git describe --tags --always) \
-  --path path/to/model
+# Использовать тестовую модель из e2e
+pack build my-sklearn-model:latest \
+  --builder localhost:5000/aagumin/mlserver-builder:$(git describe --tags --always --dirty) \
+  --path e2e/models/sklearn \
+  --pull-policy never \
+  --trust-builder
+
+# Запустить
+docker run --rm -p 8080:8080 -e MLSERVER_PARALLEL_WORKERS=0 my-sklearn-model:latest
+
+# Тест инференса
+curl -X POST http://localhost:8080/v2/models/model/infer \
+  -H "Content-Type: application/json" \
+  -d @e2e/models/sklearn/test-request.json
 ```
 
 ### Вариант 2: Модель из MLflow Registry
 
 ```bash
 pack build my-model-image \
-  --builder aagumin/mlserver-builder:$(git describe --tags --always) \
+  --builder localhost:5000/aagumin/mlserver-builder:$(git describe --tags --always --dirty) \
   --env BP_MLFLOW_MODEL_PATH="models:/my-classifier/1" \
   --env MLFLOW_TRACKING_URI="https://mlflow.example.com" \
   --env MLFLOW_TRACKING_USERNAME="user" \
-  --env MLFLOW_TRACKING_PASSWORD="pass"
+  --env MLFLOW_TRACKING_PASSWORD="pass" \
+  --pull-policy never \
+  --trust-builder
 ```
 
 ### Запуск и тест
 
 ```bash
-# Запустить контейнер
-docker run --rm -p 8080:8080 -e MLSERVER_PARALLEL_WORKERS=0 my-model-image
-
 # Проверить readiness
 curl http://localhost:8080/v2/health/ready
 
-# Тест инференса
+# Произвольный инференс запрос
 curl -X POST http://localhost:8080/v2/models/model/infer \
   -H "Content-Type: application/json" \
   -d '{"inputs": [{"name": "input", "shape": [1, 4], "datatype": "FP32", "data": [[5.1, 3.5, 1.4, 0.2]]}]}'

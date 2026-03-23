@@ -14,7 +14,7 @@ env:
   REGISTRY: ghcr.io
 
 jobs:
-  stack-images:
+  build:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.VERSION }}
@@ -34,37 +34,7 @@ jobs:
             echo "IS_STABLE=true" >> $GITHUB_OUTPUT
           fi
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Login to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build and push stack images
-        run: |
-          make stack \
-            REGISTRY=${{ env.REGISTRY }} \
-            IMAGE_PREFIX=${{ github.repository_owner }} \
-            BUILD_IMAGE_TAG=${{ steps.version.outputs.VERSION }} \
-            RUN_IMAGE_TAG=${{ steps.version.outputs.VERSION }} \
-            PLATFORMS=linux/amd64,linux/arm64
-
-      - name: Tag latest for stable release
-        if: steps.stable.outputs.IS_STABLE == 'true'
-        run: |
-          docker buildx imagetools create -t ${{ env.REGISTRY }}/${{ github.repository_owner }}/fedora-mlserver-build:latest ${{ env.REGISTRY }}/${{ github.repository_owner }}/fedora-mlserver-build:${{ steps.version.outputs.VERSION }}
-          docker buildx imagetools create -t ${{ env.REGISTRY }}/${{ github.repository_owner }}/fedora-mlserver-run:latest ${{ env.REGISTRY }}/${{ github.repository_owner }}/fedora-mlserver-run:${{ steps.version.outputs.VERSION }}
-
-  builder-image:
-    needs: stack-images
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+        fi
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -81,17 +51,12 @@ jobs:
         with:
           pack-version: 0.40.1
 
-      - name: Create and push builder with manifest
-        run: |
-          make push-builders \
-            REGISTRY=${{ env.REGISTRY }} \
-            IMAGE_PREFIX=${{ github.repository_owner }} \
-            BUILD_IMAGE_TAG=${{ needs.stack-images.outputs.version }} \
-            RUN_IMAGE_TAG=${{ needs.stack-images.outputs.version }} \
-            BUILDER_IMAGE=${{ env.REGISTRY }}/${{ github.repository_owner }}/mlserver-builder:${{ needs.stack-images.outputs.version }} \
-            PLATFORMS=linux/amd64,linux/arm64
+      - name: Build and publish multi-arch builder
+        run: make ci
 
       - name: Tag latest for stable release
-        if: needs.stack-images.outputs.is_stable == 'true'
+        if: steps.stable.outputs.IS_STABLE == 'true'
         run: |
-          docker buildx imagetools create -t ${{ env.REGISTRY }}/${{ github.repository_owner }}/mlserver-builder:latest ${{ env.REGISTRY }}/${{ github.repository_owner }}/mlserver-builder:${{ needs.stack-images.outputs.version }}
+          docker buildx imagetools create -t ${{ env.REGISTRY }}/${{ github.repository_owner }}/fedora-mlserver-build:latest ${{ env.REGISTRY }}/${{ github.repository_owner }}/fedora-mlserver-build:${{ steps.version.outputs.VERSION }}
+          docker buildx imagetools create -t ${{ env.REGISTRY }}/${{ github.repository_owner }}/fedora-mlserver-run:latest ${{ env.REGISTRY }}/${{ github.repository_owner }}/fedora-mlserver-run:${{ steps.version.outputs.VERSION }}
+          docker buildx imagetools create -t ${{ env.REGISTRY }}/${{ github.repository_owner }}/mlserver-builder:latest ${{ env.REGISTRY }}/${{ github.repository_owner }}/mlserver-builder:${{ steps.version.outputs.VERSION }}

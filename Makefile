@@ -1,11 +1,40 @@
-.PHONY: all build test lint clean package stack-build stack-run stack builder builders manifest push-builders e2e e2e-build e2e-runtime e2e-models
+.PHONY: all build test lint clean package stack-build stack-run stack builder builders manifest push-builders e2e e2e-build e2e-runtime e2e-models setup-env registry-start registry-stop
 
 BUILDPACK_ID := io.github.aagumin.mlflow-model
 VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "0.1.0")
 TIMEOUT ?= 600
 
-# Registry configuration (override for ghcr.io)
-REGISTRY ?= docker.io
+# ============================================================
+# Environment detection
+# ============================================================
+
+UNAME_S := $(shell uname -s)
+
+# Detect Lima on macOS
+ifeq ($(UNAME_S),Darwin)
+    LIMA_CHECK := $(shell limactl --version 2>/dev/null)
+    ifneq ($(LIMA_CHECK),)
+        # Lima is available on macOS
+        PACK ?= lima pack
+        DOCKER ?= lima docker
+        LIMA_HOST := $(shell lima uname -n 2>/dev/null || echo "lima")
+    else
+        PACK ?= pack
+        DOCKER ?= docker
+    endif
+else
+    # Linux
+    PACK ?= pack
+    DOCKER ?= docker
+endif
+
+# ============================================================
+# Registry configuration
+# ============================================================
+
+# Local development: localhost:5000 (zot registry)
+# CI/CD: ghcr.io
+REGISTRY ?= localhost:5000
 IMAGE_PREFIX ?= aagumin
 BUILD_IMAGE_TAG ?= 43
 RUN_IMAGE_TAG ?= 43
@@ -17,19 +46,65 @@ comma := ,
 space := $(null) $(null)
 PLATFORM_LIST := $(subst $(comma),$(space),$(PLATFORMS))
 
-# Detect OS
-UNAME_S := $(shell uname -s)
-
-# Lima on macOS, native on Linux
-ifeq ($(UNAME_S),Darwin)
-	PACK := lima pack
-	CONTAINER_TOOL ?= docker
-	DOCKER ?= lima docker
+# For multi-arch builds, we MUST push to registry (--publish required by pack)
+# Local: uses localhost:5000 (zot)
+# CI: uses ghcr.io
+ifeq ($(REGISTRY),localhost:5000)
+    # Local build - push to local zot registry
+    PUSH ?= --push
+    PUBLISH ?= --publish
 else
-	PACK := pack
-	CONTAINER_TOOL ?= docker
-	DOCKER ?= docker
+    # CI/CD - explicit control
+    PUSH ?=
+    PUBLISH ?=
 endif
+
+# ============================================================
+# Setup environment
+# ============================================================
+
+ZOT_VERSION := v2.1.1
+ZOT_CONTAINER := zot-registry
+
+setup-env:
+	@echo "=== Setting up local development environment ==="
+	@echo ""
+	@echo "Detected environment:"
+	@echo "  OS: $(UNAME_S)"
+ifeq ($(UNAME_S),Darwin)
+    ifneq ($(LIMA_CHECK),)
+	@echo "  Lima: yes ($(LIMA_HOST))"
+    else
+	@echo "  Lima: no"
+    endif
+endif
+	@echo "  Pack: $(PACK)"
+	@echo "  Docker: $(DOCKER)"
+	@echo "  Registry: $(REGISTRY)"
+	@echo ""
+	@$(MAKE) registry-start
+
+registry-start:
+	@echo "Starting zot registry on $(REGISTRY)..."
+	@$(DOCKER) run -d --rm \
+		--name $(ZOT_CONTAINER) \
+		-p 5000:5000 \
+		ghcr.io/project-zot/zot:$(ZOT_VERSION) \
+		serve /etc/zot/config.json 2>/dev/null || echo "Registry already running or starting..."
+	@sleep 2
+	@echo "Checking registry health..."
+	@curl -s http://localhost:5000/v2/ || echo "Warning: registry not responding"
+
+registry-stop:
+	@echo "Stopping zot registry..."
+	@$(DOCKER) stop $(ZOT_CONTAINER) 2>/dev/null || echo "Registry not running"
+
+registry-status:
+	@curl -s http://localhost:5000/v2/ && echo "Registry is running" || echo "Registry is not running"
+
+# ============================================================
+# Build
+# ============================================================
 
 all: build
 
@@ -55,28 +130,35 @@ package: build
 	$(PACK) buildpack package ${BUILDPACK_ID} \
 		--config buildpack/package.toml \
 		--tag ${BUILDPACK_ID}:${VERSION} \
-		--verbose 
+		--verbose
 
 # ============================================================
 # Stack images (base images for build and run)
 # ============================================================
 
+# Multi-arch: pushes to registry (required for multi-platform)
+# Single-arch local: use stack-local
 stack-build:
-	$(DOCKER) buildx build --push \
+	$(DOCKER) buildx build $(PUSH) \
 		--platform $(PLATFORMS) \
 		-t $(REGISTRY)/$(IMAGE_PREFIX)/fedora-mlserver-build:$(BUILD_IMAGE_TAG) \
 		stack/build
 
 stack-run:
-	$(DOCKER) buildx build --push \
+	$(DOCKER) buildx build $(PUSH) \
 		--platform $(PLATFORMS) \
 		-t $(REGISTRY)/$(IMAGE_PREFIX)/fedora-mlserver-run:$(RUN_IMAGE_TAG) \
 		stack/run
 
+# Single-platform local build (faster, loads to docker daemon)
+stack-local: PLATFORMS = linux/$(shell uname -m)
+stack-local: PUSH = --load
+stack-local: stack-build stack-run
+
 stack: stack-build stack-run
 
 # ============================================================
-# Builder (modern approach without deprecated stack)
+# Builder
 # ============================================================
 
 # Generate builder config from template
@@ -87,8 +169,19 @@ builder.generated.toml: builder.toml.template
 	    -e 's|{{RUN_IMAGE_TAG}}|$(RUN_IMAGE_TAG)|g' \
 	    $< > $@
 
-# Create multi-arch builder using --target flags
-builder: stack package builder.generated.toml
+# Local: single-platform builder (loads to docker daemon, no registry needed)
+# Use this for local development
+builder: stack-local package builder.generated.toml
+	$(PACK) builder create $(BUILDER_IMAGE) \
+		--config builder.generated.toml \
+		--pull-policy if-not-present \
+		--verbose
+
+# Multi-arch builder with registry push (CI only - requires proper registry like ghcr.io)
+# Does NOT work with localhost:5000/zot due to manifest list limitations
+builder-multi: PLATFORMS = linux/amd64,linux/arm64
+builder-multi: PUSH = --push
+builder-multi: stack package builder.generated.toml
 	$(PACK) builder create $(BUILDER_IMAGE) \
 		--config builder.generated.toml \
 		$(foreach p,$(PLATFORM_LIST),--target $(p)) \
@@ -97,7 +190,11 @@ builder: stack package builder.generated.toml
 		--verbose
 
 # Alias for CI compatibility
-push-builders: builder
+push-builders: builder-multi
+
+# CI target - multi-arch build for ghcr.io
+ci: REGISTRY = ghcr.io
+ci: builder-multi
 
 # ============================================================
 # Development targets
