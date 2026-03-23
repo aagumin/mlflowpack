@@ -34,8 +34,6 @@ jobs:
             echo "IS_STABLE=true" >> $GITHUB_OUTPUT
           fi
 
-        fi
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
