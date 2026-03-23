@@ -13,7 +13,9 @@ BUILDER_IMAGE ?= $(REGISTRY)/$(IMAGE_PREFIX)/mlserver-builder:$(VERSION)
 
 # Multi-platform configuration
 PLATFORMS ?= linux/amd64,linux/arm64
-BUILDER_ARCHS := $(subst linux/,,$(PLATFORMS))
+comma := ,
+space := $(null) $(null)
+PLATFORM_LIST := $(subst $(comma),$(space),$(PLATFORMS))
 
 # Detect OS
 UNAME_S := $(shell uname -s)
@@ -85,30 +87,17 @@ builder.generated.toml: builder.toml.template
 	    -e 's|{{RUN_IMAGE_TAG}}|$(RUN_IMAGE_TAG)|g' \
 	    $< > $@
 
-# Create builder for specific architecture
-builder-%: builder.generated.toml
-	$(PACK) builder create $(BUILDER_IMAGE)-$* \
-		--config $< \
+# Create multi-arch builder using --target flags
+builder: stack package builder.generated.toml
+	$(PACK) builder create $(BUILDER_IMAGE) \
+		--config builder.generated.toml \
+		$(foreach p,$(PLATFORM_LIST),--target $(p)) \
+		--publish \
 		--pull-policy if-not-present \
 		--verbose
 
-# Create builders for all architectures
-builders: $(foreach arch,$(BUILDER_ARCHS),builder-$(arch))
-
-# Create manifest list from architecture-specific builders
-manifest: builders
-	$(DOCKER) manifest create $(BUILDER_IMAGE) \
-		$(foreach arch,$(BUILDER_ARCHS),$(BUILDER_IMAGE)-$(arch))
-
-# Push all architecture-specific builders
-push-builders: manifest
-	@for arch in $(BUILDER_ARCHS); do \
-		$(DOCKER) push $(BUILDER_IMAGE)-$$arch; \
-	done
-	$(DOCKER) manifest push $(BUILDER_IMAGE)
-
-# Full builder cycle: stack + package + builders + manifest
-builder: stack package manifest
+# Alias for CI compatibility
+push-builders: builder
 
 # ============================================================
 # Development targets

@@ -19,3 +19,13 @@ image = "{{REGISTRY}}/{{IMAGE_PREFIX}}/fedora-mlserver-build:{{BUILD_IMAGE_TAG}}
 # Run images - used during run phase
 [[run.images]]
 image = "{{REGISTRY}}/{{IMAGE_PREFIX}}/fedora-mlserver-run:{{RUN_IMAGE_TAG}}"
+
+# Target platforms for multi-arch builder
+# Use: pack builder create --target linux/amd64 --target linux/arm64
+[[targets]]
+os = "linux"
+arch = "amd64"
+
+[[targets]]
+os = "linux"
+arch = "arm64"
