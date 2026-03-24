@@ -13,11 +13,12 @@ type BOM struct {
 
 // Component represents a single component in the BOM.
 type Component struct {
-	Type     string    `json:"type"`
-	Name     string    `json:"name"`
-	Version  string    `json:"version,omitempty"`
-	PURL     string    `json:"purl,omitempty"`
-	Licenses []License `json:"licenses,omitempty"`
+	Type         string              `json:"type"`
+	Name         string              `json:"name"`
+	Version      string              `json:"version,omitempty"`
+	PURL         string              `json:"purl,omitempty"`
+	Licenses     []License           `json:"licenses,omitempty"`
+	ExternalRefs []ExternalReference `json:"externalReferences,omitempty"`
 }
 
 // License represents a software license.
