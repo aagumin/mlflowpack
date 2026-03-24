@@ -29,7 +29,7 @@ func ParseMetadata(path string) (Package, error) {
 	if err != nil {
 		return Package{}, fmt.Errorf("opening metadata file: %w", err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	pkg := Package{}
 	scanner := bufio.NewScanner(file)
