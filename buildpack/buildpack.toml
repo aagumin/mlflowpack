@@ -6,6 +6,7 @@ version = "0.1.0"
 name = "MLflow Model Buildpack"
 homepage = "https://github.com/aagumin/mlflowpack"
 description = "Buildpack for MLflow models with MLServer runtime"
+sbom-formats = ["application/vnd.cyclonedx+json"]
 
 # Modern targets approach (replaces deprecated stacks)
 [[targets]]
