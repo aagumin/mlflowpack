@@ -218,7 +218,6 @@ e2e:
 	./e2e/scripts/run-all.sh
 
 clean:
-	rm -rf buildpack/bin/linux-amd64
-	rm -rf buildpack/bin/linux-arm64
+	rm -rf buildpack/bin/linux
 	rm -rf out/
 	rm -f builder.generated.toml
