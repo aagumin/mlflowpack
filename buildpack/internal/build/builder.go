@@ -17,6 +17,7 @@ import (
 	"github.com/aagumin/mlflowpack/internal/layer"
 	"github.com/aagumin/mlflowpack/internal/mlflow"
 	"github.com/aagumin/mlflowpack/internal/python"
+	"github.com/aagumin/mlflowpack/internal/sbom"
 )
 
 const (
@@ -105,11 +106,30 @@ func Build(ctx cnb.BuildContext) (cnb.BuildResult, error) {
 	if err := installer.SetupFromConda(context.Background(), dependencies.conda, pythonPath, venvPath); err != nil {
 		return result, fmt.Errorf("setting up Python: %w", err)
 	}
+
+	// Write Python SBOM
+	pythonVersion := dependencies.conda.PythonVersion()
+	if pythonVersion == "" {
+		pythonVersion = python.DefaultPythonVersion
+	}
+	if err := sbom.WritePythonSBOM(ctx.LayersDir, pythonVersion); err != nil {
+		return result, fmt.Errorf("writing python SBOM: %w", err)
+	}
+
 	if dependencies.requirementsPath != "" {
 		fmt.Printf("conda.yaml not found; installing dependencies from %s\n", filepath.Base(dependencies.requirementsPath))
 		if err := installer.InstallDepsFromFile(context.Background(), venvPath, dependencies.requirementsPath); err != nil {
 			return result, fmt.Errorf("installing dependencies from requirements.txt: %w", err)
 		}
+	}
+
+	// Write venv SBOM
+	packages, err := sbom.ParseVenv(venvPath)
+	if err != nil {
+		return result, fmt.Errorf("parsing venv for SBOM: %w", err)
+	}
+	if err := sbom.WriteLayerSBOM(ctx.LayersDir, layer.VenvLayerName, packages); err != nil {
+		return result, fmt.Errorf("writing venv SBOM: %w", err)
 	}
 
 	// Configure PATH for build and launch
