@@ -28,7 +28,7 @@ func Detect(ctx cnb.DetectContext) (cnb.DetectResult, error) {
 	if _, _, ok, err := DetectFromModelPathEnv(); err != nil {
 		return cnb.DetectResult{}, err
 	} else if ok {
-		return cnb.DetectResult{Pass: true}, nil
+		return writePlanAndPass(ctx)
 	}
 
 	if _, err := FindLocalModelDir(ctx.AppDir); err != nil {
@@ -42,6 +42,21 @@ func Detect(ctx cnb.DetectContext) (cnb.DetectResult, error) {
 		} else {
 			return cnb.DetectResult{}, err
 		}
+	}
+
+	return writePlanAndPass(ctx)
+}
+
+// writePlanAndPass writes the build plan and returns a passing result.
+func writePlanAndPass(ctx cnb.DetectContext) (cnb.DetectResult, error) {
+	plan := cnb.BuildPlan{
+		Provides: []cnb.BuildPlanEntry{
+			{Name: "mlflow-model"},
+		},
+	}
+
+	if err := cnb.WriteBuildPlan(ctx.BuildPlanPath, plan); err != nil {
+		return cnb.DetectResult{}, fmt.Errorf("writing build plan: %w", err)
 	}
 
 	return cnb.DetectResult{Pass: true}, nil

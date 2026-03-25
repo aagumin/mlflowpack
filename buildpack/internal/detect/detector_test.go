@@ -82,8 +82,9 @@ func TestDetect(t *testing.T) {
 	t.Run("passes with nested local model", func(t *testing.T) {
 		appDir := t.TempDir()
 		writeMLmodelFile(t, filepath.Join(appDir, "nested", "model"))
+		buildPlanPath := filepath.Join(t.TempDir(), "buildplan.toml")
 
-		res, err := Detect(cnb.DetectContext{AppDir: appDir})
+		res, err := Detect(cnb.DetectContext{AppDir: appDir, BuildPlanPath: buildPlanPath})
 		if err != nil {
 			t.Fatalf("Detect() error = %v", err)
 		}
@@ -107,8 +108,9 @@ func TestDetect(t *testing.T) {
 	t.Run("passes with registry env", func(t *testing.T) {
 		appDir := t.TempDir()
 		t.Setenv("BP_MLFLOW_MODEL_NAME", "wine-model")
+		buildPlanPath := filepath.Join(t.TempDir(), "buildplan.toml")
 
-		res, err := Detect(cnb.DetectContext{AppDir: appDir})
+		res, err := Detect(cnb.DetectContext{AppDir: appDir, BuildPlanPath: buildPlanPath})
 		if err != nil {
 			t.Fatalf("Detect() error = %v", err)
 		}
@@ -136,8 +138,9 @@ func TestDetect(t *testing.T) {
 		writeMLmodelFile(t, filepath.Join(appDir, "models", "first"))
 		writeMLmodelFile(t, filepath.Join(appDir, "models", "second"))
 		t.Setenv(EnvModelPath, "models:/wine-classifier/7")
+		buildPlanPath := filepath.Join(t.TempDir(), "buildplan.toml")
 
-		res, err := Detect(cnb.DetectContext{AppDir: appDir})
+		res, err := Detect(cnb.DetectContext{AppDir: appDir, BuildPlanPath: buildPlanPath})
 		if err != nil {
 			t.Fatalf("Detect() error = %v", err)
 		}
