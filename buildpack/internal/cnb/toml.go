@@ -64,3 +64,18 @@ func ReadLayerToml(layersDir, layerName string) (LayerMetadata, error) {
 
 	return metadata, nil
 }
+
+// WriteBuildPlan writes the build plan to the specified path.
+func WriteBuildPlan(path string, plan BuildPlan) (err error) {
+	f, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if closeErr := f.Close(); closeErr != nil {
+			err = errors.Join(err, fmt.Errorf("closing %q: %w", path, closeErr))
+		}
+	}()
+
+	return toml.NewEncoder(f).Encode(plan)
+}
