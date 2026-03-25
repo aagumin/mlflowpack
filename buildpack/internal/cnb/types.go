@@ -69,6 +69,16 @@ type DetectResult struct {
 	Pass bool
 }
 
+// BuildPlan represents the build plan written during detect.
+type BuildPlan struct {
+	Provides []BuildPlanEntry `toml:"provides"`
+}
+
+// BuildPlanEntry represents a single provides entry.
+type BuildPlanEntry struct {
+	Name string `toml:"name"`
+}
+
 // Exit codes for detect phase.
 const (
 	ExitCodePass = 0   // Detection passed
