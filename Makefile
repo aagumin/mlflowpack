@@ -118,6 +118,10 @@ build:
 	cd buildpack && GOSUMDB=sum.golang.org CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -o bin/linux/arm64/build ./cmd/build
 	chmod +x buildpack/bin/linux/amd64/detect buildpack/bin/linux/amd64/build
 	chmod +x buildpack/bin/linux/arm64/detect buildpack/bin/linux/arm64/build
+	@echo "Creating architecture dispatcher scripts..."
+	@printf '#!/usr/bin/env bash\nARCH=$$(uname -m)\ncase "$$ARCH" in\n  x86_64|amd64) exec "$$(dirname "$$0")/linux/amd64/detect" "$$@" ;;\n  aarch64|arm64) exec "$$(dirname "$$0")/linux/arm64/detect" "$$@" ;;\n  *) echo "Unsupported architecture: $$ARCH" >&2; exit 1 ;;\nesac\n' > buildpack/bin/detect
+	@printf '#!/usr/bin/env bash\nARCH=$$(uname -m)\ncase "$$ARCH" in\n  x86_64|amd64) exec "$$(dirname "$$0")/linux/amd64/build" "$$@" ;;\n  aarch64|arm64) exec "$$(dirname "$$0")/linux/arm64/build" "$$@" ;;\n  *) echo "Unsupported architecture: $$ARCH" >&2; exit 1 ;;\nesac\n' > buildpack/bin/build
+	chmod +x buildpack/bin/detect buildpack/bin/build
 
 test:
 	cd buildpack && GOSUMDB=sum.golang.org GOCACHE=/tmp/aipack-go-cache go test -v ./...
@@ -219,5 +223,6 @@ e2e:
 
 clean:
 	rm -rf buildpack/bin/linux
+	rm -f buildpack/bin/detect buildpack/bin/build
 	rm -rf out/
 	rm -f builder.generated.toml
