@@ -214,6 +214,16 @@ func Build(ctx cnb.BuildContext) (cnb.BuildResult, error) {
 		Default: true,
 	})
 
+	// Add image labels
+	result.Launch.Labels = []cnb.Label{
+		{Key: "org.opencontainers.image.title", Value: modelSource.Name},
+		{Key: "org.opencontainers.image.version", Value: modelSource.Version},
+		{Key: "org.opencontainers.image.description", Value: "MLflow model served by MLServer"},
+		{Key: "io.github.aagumin.model-flavor", Value: flavor},
+		{Key: "io.github.aagumin.model-name", Value: modelSource.Name},
+		{Key: "io.github.aagumin.mlserver-runtime", Value: mlserverExt.Runtime},
+	}
+
 	return result, nil
 }
 
