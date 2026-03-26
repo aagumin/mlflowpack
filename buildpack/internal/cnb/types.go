@@ -72,9 +72,10 @@ type DetectResult struct {
 // BuildPlan represents the build plan written during detect.
 type BuildPlan struct {
 	Provides []BuildPlanEntry `toml:"provides"`
+	Requires []BuildPlanEntry `toml:"requires"`
 }
 
-// BuildPlanEntry represents a single provides entry.
+// BuildPlanEntry represents a single provides/requires entry.
 type BuildPlanEntry struct {
 	Name string `toml:"name"`
 }

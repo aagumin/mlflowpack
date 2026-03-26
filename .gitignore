@@ -24,6 +24,7 @@ profile.out
 buildpack/.gocache/
 out/
 builder.generated.toml
+buildpack/buildpack.toml
 
 # Buildpack compiled binaries (keep launcher scripts in buildpack/bin/)
 buildpack/bin/linux-amd64/

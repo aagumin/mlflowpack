@@ -48,9 +48,14 @@ func Detect(ctx cnb.DetectContext) (cnb.DetectResult, error) {
 }
 
 // writePlanAndPass writes the build plan and returns a passing result.
+// The buildpack both requires and provides mlflow-model, allowing it to work
+// standalone while also enabling other buildpacks to depend on it.
 func writePlanAndPass(ctx cnb.DetectContext) (cnb.DetectResult, error) {
 	plan := cnb.BuildPlan{
 		Provides: []cnb.BuildPlanEntry{
+			{Name: "mlflow-model"},
+		},
+		Requires: []cnb.BuildPlanEntry{
 			{Name: "mlflow-model"},
 		},
 	}

@@ -130,7 +130,11 @@ test:
 lint:
 	cd buildpack && GOSUMDB=sum.golang.org golangci-lint run ./...
 
-package: build
+# Generate buildpack.toml from template
+buildpack/buildpack.toml: buildpack/buildpack.toml.template
+	sed -e 's|{{VERSION}}|$(VERSION)|g' $< > $@
+
+package: build buildpack/buildpack.toml
 	$(PACK) buildpack package ${BUILDPACK_ID} \
 		--config buildpack/package.toml \
 		--tag ${BUILDPACK_ID}:${VERSION} \
@@ -226,3 +230,4 @@ clean:
 	rm -f buildpack/bin/detect buildpack/bin/build
 	rm -rf out/
 	rm -f builder.generated.toml
+	rm -f buildpack/buildpack.toml
