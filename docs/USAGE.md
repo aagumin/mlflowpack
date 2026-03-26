@@ -9,7 +9,8 @@
 3. [Сборка с MLflow Registry](#сборка-с-mlflow-registry)
 4. [Конфигурация](#конфигурация)
 5. [Инференс](#инференс)
-6. [Troubleshooting](#troubleshooting)
+6. [Buildpack Features](#buildpack-features)
+7. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -526,6 +527,43 @@ pack builder pull ghcr.io/aagumin/mlserver-builder:1.0.0
 
 # Pre-release
 pack builder pull ghcr.io/aagumin/mlserver-builder:1.0.0-beta.1
+```
+
+---
+
+## Buildpack Features
+
+### Build Plan
+
+Buildpack предоставляет `mlflow-model` в build plan во время фазы detect. Это позволяет другим buildpack-ам зависеть от этого.
+
+### Layer Reuse (Кэширование слоёв)
+
+Buildpack автоматически переиспользует закэшированные слои, если модель не изменилась. Определение изменений происходит по `model_uuid` из файла `MLmodel`:
+
+```
+Model unchanged (UUID: abc123...), reusing cached layers
+```
+
+Это значительно ускоряет повторные сборки той же модели.
+
+### Image Labels
+
+Buildpack добавляет метки (labels) к образу:
+
+| Label | Описание |
+|-------|----------|
+| `org.opencontainers.image.title` | Имя модели |
+| `org.opencontainers.image.version` | Версия модели |
+| `org.opencontainers.image.description` | Описание образа |
+| `io.github.aagumin.model-flavor` | Flavor модели (sklearn, pyfunc, etc.) |
+| `io.github.aagumin.model-name` | Имя модели |
+| `io.github.aagumin.mlserver-runtime` | MLServer runtime |
+
+Проверить метки:
+
+```bash
+docker inspect --format='{{json .Config.Labels}}' my-model:latest
 ```
 
 ---
