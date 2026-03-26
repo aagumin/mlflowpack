@@ -3,6 +3,7 @@ package sbom
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -70,12 +71,16 @@ func versionToURL(version string) string {
 	return v
 }
 
-func writeJSON(path string, data interface{}) error {
+func writeJSON(path string, data interface{}) (err error) {
 	file, err := os.Create(path)
 	if err != nil {
 		return fmt.Errorf("creating SBOM file: %w", err)
 	}
-	defer file.Close()
+	defer func() {
+		if closeErr := file.Close(); closeErr != nil {
+			err = errors.Join(err, fmt.Errorf("closing %q: %w", path, closeErr))
+		}
+	}()
 
 	encoder := json.NewEncoder(file)
 	encoder.SetIndent("", "  ")
