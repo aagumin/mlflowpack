@@ -106,6 +106,14 @@ func (m *Model) GetMLServerExtension() (*MLServerExtension, error) {
 	return m.MLmodel.GetMLServerExtension()
 }
 
+// UUID returns the model UUID from the MLmodel file.
+func (m *Model) UUID() string {
+	if m.MLmodel == nil {
+		return ""
+	}
+	return m.MLmodel.ModelUUID
+}
+
 // NewLocalModel creates a Model from a local directory.
 func NewLocalModel(path string) *Model {
 	return &Model{
