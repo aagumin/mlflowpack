@@ -31,6 +31,23 @@ const (
 	EnvModelStage = "BP_MLFLOW_MODEL_STAGE"
 )
 
+// cachedModelUUID returns the model UUID from cached model layer metadata.
+func cachedModelUUID(layersDir string) string {
+	meta, err := cnb.ReadLayerToml(layersDir, layer.ModelLayerName)
+	if err != nil {
+		return ""
+	}
+	if meta.Metadata == nil {
+		return ""
+	}
+	metadata, ok := meta.Metadata.(map[string]interface{})
+	if !ok {
+		return ""
+	}
+	uuid, _ := metadata["model_uuid"].(string)
+	return uuid
+}
+
 // Build executes the build phase.
 func Build(ctx cnb.BuildContext) (cnb.BuildResult, error) {
 	result := cnb.BuildResult{
@@ -59,6 +76,28 @@ func Build(ctx cnb.BuildContext) (cnb.BuildResult, error) {
 	// Parse MLmodel file to detect flavor
 	if err := model.ParseMLmodel(); err != nil {
 		return result, fmt.Errorf("parsing MLmodel: %w", err)
+	}
+
+	// Check for cached layers with same model UUID
+	cachedUUID := cachedModelUUID(ctx.LayersDir)
+	currentUUID := model.UUID()
+
+	if cachedUUID != "" && cachedUUID == currentUUID {
+		fmt.Printf("Model unchanged (UUID: %s), reusing cached layers\n", currentUUID)
+
+		// Return cached layer metadata
+		result.Layers[layer.PythonLayerName] = cnb.LayerMetadata{Types: layer.DefaultPythonLayerTypes()}
+		result.Layers[layer.VenvLayerName] = cnb.LayerMetadata{Types: layer.DefaultVenvLayerTypes()}
+		result.Layers[layer.ModelLayerName] = cnb.LayerMetadata{Types: layer.DefaultModelLayerTypes()}
+
+		// Add process for cached venv
+		result.Launch.Processes = append(result.Launch.Processes, cnb.ProcessEntry{
+			Type:    "web",
+			Command: []string{filepath.Join(ctx.LayersDir, layer.VenvLayerName, "bin", "mlserver"), "start", filepath.Join(ctx.LayersDir, layer.ModelLayerName)},
+			Default: true,
+		})
+
+		return result, nil
 	}
 
 	// Get MLServer extension based on model flavor
@@ -95,7 +134,6 @@ func Build(ctx cnb.BuildContext) (cnb.BuildResult, error) {
 	if err != nil {
 		return result, fmt.Errorf("creating model layer: %w", err)
 	}
-	result.Layers[layer.ModelLayerName] = cnb.LayerMetadata{Types: layer.DefaultModelLayerTypes()}
 
 	// Install Python and dependencies using uv
 	uvEnv, err := installerEnv(ctx, pythonPath)
@@ -111,6 +149,16 @@ func Build(ctx cnb.BuildContext) (cnb.BuildResult, error) {
 	pythonVersion := dependencies.conda.PythonVersion()
 	if pythonVersion == "" {
 		pythonVersion = python.DefaultPythonVersion
+	}
+
+	// Set model layer metadata with UUID
+	result.Layers[layer.ModelLayerName] = cnb.LayerMetadata{
+		Types: layer.DefaultModelLayerTypes(),
+		Metadata: map[string]interface{}{
+			"model_uuid":     model.UUID(),
+			"flavor":         flavor,
+			"python_version": pythonVersion,
+		},
 	}
 	if err := sbom.WritePythonSBOM(ctx.LayersDir, pythonVersion); err != nil {
 		return result, fmt.Errorf("writing python SBOM: %w", err)
