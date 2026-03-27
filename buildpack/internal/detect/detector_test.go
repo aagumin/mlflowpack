@@ -292,7 +292,7 @@ func TestDetectStoragePath(t *testing.T) {
 			wantOK:   true,
 		},
 		{
-			name:     "local path",
+			name:     "local absolute path",
 			path:     "/workspace/model",
 			wantType: "local",
 			wantPath: "/workspace/model",
@@ -315,6 +315,13 @@ func TestDetectStoragePath(t *testing.T) {
 		{
 			name:     "empty path",
 			path:     "",
+			wantType: "",
+			wantPath: "",
+			wantOK:   false,
+		},
+		{
+			name:     "relative path (not a storage path)",
+			path:     "models/second",
 			wantType: "",
 			wantPath: "",
 			wantOK:   false,

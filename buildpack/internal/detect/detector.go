@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/aagumin/mlflowpack/internal/cnb"
@@ -137,8 +138,10 @@ func DetectFromModelPathEnv() (modelName, modelVersion string, ok bool, err erro
 // Returns (storageType, path, ok) where storageType is "s3" or "local".
 // Supported formats:
 //   - s3://bucket/path/to/model
-//   - /local/path/to/model
+//   - /local/path/to/model (absolute path only)
 //   - file:///local/path/to/model
+//
+// Relative paths are NOT handled here - they are resolved by FindLocalModelDir.
 func DetectStoragePath() (storageType, path string, ok bool) {
 	raw := strings.TrimSpace(os.Getenv(EnvModelPath))
 	if raw == "" {
@@ -162,6 +165,11 @@ func DetectStoragePath() (storageType, path string, ok bool) {
 		return "", "", false
 	}
 
-	// Assume local path
-	return "local", raw, true
+	// Only treat absolute paths as storage paths
+	// Relative paths are handled by FindLocalModelDir
+	if filepath.IsAbs(raw) {
+		return "local", raw, true
+	}
+
+	return "", "", false
 }

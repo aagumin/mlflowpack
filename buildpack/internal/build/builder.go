@@ -13,11 +13,13 @@ import (
 
 	"github.com/aagumin/mlflowpack/internal/cnb"
 	"github.com/aagumin/mlflowpack/internal/conda"
+	"github.com/aagumin/mlflowpack/internal/deps"
 	"github.com/aagumin/mlflowpack/internal/detect"
 	"github.com/aagumin/mlflowpack/internal/layer"
 	"github.com/aagumin/mlflowpack/internal/mlflow"
 	"github.com/aagumin/mlflowpack/internal/python"
 	"github.com/aagumin/mlflowpack/internal/sbom"
+	"github.com/aagumin/mlflowpack/internal/storage"
 )
 
 const (
@@ -60,44 +62,120 @@ func Build(ctx cnb.BuildContext) (cnb.BuildResult, error) {
 		return result, err
 	}
 
-	// Get model
-	model, err := getModel(ctx, modelSource)
-	if err != nil {
-		return result, err
-	}
-	if modelSource.Type == "registry" && model.Path != "" {
-		defer func() {
-			if cleanupErr := os.RemoveAll(model.Path); cleanupErr != nil {
-				fmt.Fprintf(os.Stderr, "warning: failed to remove temporary model directory %q: %v\n", model.Path, cleanupErr)
-			}
-		}()
-	}
+	var model *mlflow.Model
+	var store storage.Storage
+	var tempMetaDir string
 
-	// Parse MLmodel file to detect flavor
-	if err := model.ParseMLmodel(); err != nil {
-		return result, fmt.Errorf("parsing MLmodel: %w", err)
-	}
+	// Handle storage type (s3:// or local path) with two-phase download
+	if modelSource.Type == "storage" {
+		// Phase 1: Download metadata only for dependency hash computation
+		tempMetaDir, err = TempDir(ctx, "mlflow-metadata-")
+		if err != nil {
+			return result, fmt.Errorf("creating temp metadata dir: %w", err)
+		}
+		defer os.RemoveAll(tempMetaDir)
 
-	// Check for cached layers with same model UUID
-	cachedUUID := cachedModelUUID(ctx.LayersDir)
-	currentUUID := model.UUID()
+		// Create storage backend
+		var storagePath string
+		if modelSource.StorageType == "s3" {
+			storagePath = "s3://" + modelSource.Path
+		} else {
+			storagePath = modelSource.Path
+		}
 
-	if cachedUUID != "" && cachedUUID == currentUUID {
-		fmt.Printf("Model unchanged (UUID: %s), reusing cached layers\n", currentUUID)
+		store, err = storage.NewStorage(storagePath)
+		if err != nil {
+			return result, fmt.Errorf("creating storage: %w", err)
+		}
 
-		// Return cached layer metadata
-		result.Layers[layer.PythonLayerName] = cnb.LayerMetadata{Types: layer.DefaultPythonLayerTypes()}
-		result.Layers[layer.VenvLayerName] = cnb.LayerMetadata{Types: layer.DefaultVenvLayerTypes()}
-		result.Layers[layer.ModelLayerName] = cnb.LayerMetadata{Types: layer.DefaultModelLayerTypes()}
+		fmt.Printf("Downloading metadata from %s...\n", store.String())
+		if err := store.DownloadMetadata(context.Background(), tempMetaDir); err != nil {
+			return result, fmt.Errorf("downloading model metadata: %w", err)
+		}
 
-		// Add process for cached venv
-		result.Launch.Processes = append(result.Launch.Processes, cnb.ProcessEntry{
-			Type:    "web",
-			Command: []string{filepath.Join(ctx.LayersDir, layer.VenvLayerName, "bin", "mlserver"), "start", filepath.Join(ctx.LayersDir, layer.ModelLayerName)},
-			Default: true,
-		})
+		// Compute dependency hash from metadata
+		currentDepsHash, err := deps.ComputeHash(tempMetaDir)
+		if err != nil {
+			return result, fmt.Errorf("computing dependency hash: %w", err)
+		}
 
-		return result, nil
+		// Get previous hash (from env or cache)
+		prevDepsHash := PrevDepsHashFromEnv()
+		if prevDepsHash == "" {
+			prevDepsHash = CachedDepsHash(ctx.LayersDir)
+		}
+
+		fmt.Printf("Dependency hash: %s\n", currentDepsHash)
+		if prevDepsHash != "" {
+			fmt.Printf("Previous hash: %s\n", prevDepsHash)
+		}
+
+		// Parse MLmodel from metadata
+		model = mlflow.NewLocalModel(tempMetaDir)
+		if err := model.ParseMLmodel(); err != nil {
+			return result, fmt.Errorf("parsing MLmodel: %w", err)
+		}
+
+		// Check if dependencies changed
+		depsChanged := currentDepsHash != prevDepsHash || prevDepsHash == ""
+
+		if !depsChanged {
+			fmt.Println("Dependencies unchanged, reusing cached Python and venv layers")
+			// Reuse Python and venv layers (they exist from previous build)
+			result.Layers[layer.PythonLayerName] = cnb.LayerMetadata{Types: layer.DefaultPythonLayerTypes()}
+			result.Layers[layer.VenvLayerName] = cnb.LayerMetadata{Types: layer.DefaultVenvLayerTypes()}
+		} else {
+			fmt.Println("Dependencies changed, rebuilding Python and venv layers")
+			// Will rebuild Python and venv layers below
+		}
+
+		// Store the current deps hash for later use
+		result.Layers[layer.VenvLayerName] = cnb.LayerMetadata{
+			Types: layer.DefaultVenvLayerTypes(),
+			Metadata: map[string]interface{}{
+				"deps_hash": currentDepsHash,
+			},
+		}
+	} else {
+		// Get model for local/registry types
+		model, err = getModel(ctx, modelSource)
+		if err != nil {
+			return result, err
+		}
+		if modelSource.Type == "registry" && model.Path != "" {
+			defer func() {
+				if cleanupErr := os.RemoveAll(model.Path); cleanupErr != nil {
+					fmt.Fprintf(os.Stderr, "warning: failed to remove temporary model directory %q: %v\n", model.Path, cleanupErr)
+				}
+			}()
+		}
+
+		// Parse MLmodel file to detect flavor
+		if err := model.ParseMLmodel(); err != nil {
+			return result, fmt.Errorf("parsing MLmodel: %w", err)
+		}
+
+		// Check for cached layers with same model UUID
+		cachedUUID := cachedModelUUID(ctx.LayersDir)
+		currentUUID := model.UUID()
+
+		if cachedUUID != "" && cachedUUID == currentUUID {
+			fmt.Printf("Model unchanged (UUID: %s), reusing cached layers\n", currentUUID)
+
+			// Return cached layer metadata
+			result.Layers[layer.PythonLayerName] = cnb.LayerMetadata{Types: layer.DefaultPythonLayerTypes()}
+			result.Layers[layer.VenvLayerName] = cnb.LayerMetadata{Types: layer.DefaultVenvLayerTypes()}
+			result.Layers[layer.ModelLayerName] = cnb.LayerMetadata{Types: layer.DefaultModelLayerTypes()}
+
+			// Add process for cached venv
+			result.Launch.Processes = append(result.Launch.Processes, cnb.ProcessEntry{
+				Type:    "web",
+				Command: []string{filepath.Join(ctx.LayersDir, layer.VenvLayerName, "bin", "mlserver"), "start", filepath.Join(ctx.LayersDir, layer.ModelLayerName)},
+				Default: true,
+			})
+
+			return result, nil
+		}
 	}
 
 	// Get MLServer extension based on model flavor
@@ -115,19 +193,74 @@ func Build(ctx cnb.BuildContext) (cnb.BuildResult, error) {
 		return result, err
 	}
 
-	// Create Python layer
-	pythonPath, err := layer.SetupLayer(ctx.LayersDir, layer.PythonLayerName, layer.DefaultPythonLayerTypes())
-	if err != nil {
-		return result, fmt.Errorf("creating python layer: %w", err)
-	}
-	result.Layers[layer.PythonLayerName] = cnb.LayerMetadata{Types: layer.DefaultPythonLayerTypes()}
+	// Check if we need to rebuild Python and venv layers
+	rebuildDeps := modelSource.Type == "storage" ||
+		result.Layers[layer.PythonLayerName].Types.Launch == false
 
-	// Create venv layer
-	venvPath, err := layer.SetupLayer(ctx.LayersDir, layer.VenvLayerName, layer.DefaultVenvLayerTypes())
-	if err != nil {
-		return result, fmt.Errorf("creating venv layer: %w", err)
+	var pythonPath, venvPath string
+
+	if rebuildDeps {
+		// Create Python layer
+		pythonPath, err = layer.SetupLayer(ctx.LayersDir, layer.PythonLayerName, layer.DefaultPythonLayerTypes())
+		if err != nil {
+			return result, fmt.Errorf("creating python layer: %w", err)
+		}
+		result.Layers[layer.PythonLayerName] = cnb.LayerMetadata{Types: layer.DefaultPythonLayerTypes()}
+
+		// Create venv layer
+		venvPath, err = layer.SetupLayer(ctx.LayersDir, layer.VenvLayerName, layer.DefaultVenvLayerTypes())
+		if err != nil {
+			return result, fmt.Errorf("creating venv layer: %w", err)
+		}
+
+		// Install Python and dependencies using uv
+		uvEnv, err := installerEnv(ctx, pythonPath)
+		if err != nil {
+			return result, fmt.Errorf("configuring uv environment: %w", err)
+		}
+		installer := python.NewInstallerWithPathAndEnv("uv", uvEnv)
+		if err := installer.SetupFromConda(context.Background(), dependencies.conda, pythonPath, venvPath); err != nil {
+			return result, fmt.Errorf("setting up Python: %w", err)
+		}
+
+		// Write Python SBOM
+		pythonVersion := dependencies.conda.PythonVersion()
+		if pythonVersion == "" {
+			pythonVersion = python.DefaultPythonVersion
+		}
+
+		if err := sbom.WritePythonSBOM(ctx.LayersDir, pythonVersion); err != nil {
+			return result, fmt.Errorf("writing python SBOM: %w", err)
+		}
+
+		if dependencies.requirementsPath != "" {
+			fmt.Printf("conda.yaml not found; installing dependencies from %s\n", filepath.Base(dependencies.requirementsPath))
+			if err := installer.InstallDepsFromFile(context.Background(), venvPath, dependencies.requirementsPath); err != nil {
+				return result, fmt.Errorf("installing dependencies from requirements.txt: %w", err)
+			}
+		}
+
+		// Write venv SBOM
+		packages, err := sbom.ParseVenv(venvPath)
+		if err != nil {
+			return result, fmt.Errorf("parsing venv for SBOM: %w", err)
+		}
+		if err := sbom.WriteLayerSBOM(ctx.LayersDir, layer.VenvLayerName, packages); err != nil {
+			return result, fmt.Errorf("writing venv SBOM: %w", err)
+		}
+
+		// Configure PATH for build and launch
+		if err := cnb.PrependToPath(pythonPath, filepath.Join(pythonPath, "bin")); err != nil {
+			return result, fmt.Errorf("configuring PATH: %w", err)
+		}
+		if err := cnb.PrependToPath(venvPath, filepath.Join(venvPath, "bin")); err != nil {
+			return result, fmt.Errorf("configuring PATH: %w", err)
+		}
+	} else {
+		// Use existing layer paths
+		pythonPath = filepath.Join(ctx.LayersDir, layer.PythonLayerName)
+		venvPath = filepath.Join(ctx.LayersDir, layer.VenvLayerName)
 	}
-	result.Layers[layer.VenvLayerName] = cnb.LayerMetadata{Types: layer.DefaultVenvLayerTypes()}
 
 	// Create model layer
 	modelPath, err := layer.SetupLayer(ctx.LayersDir, layer.ModelLayerName, layer.DefaultModelLayerTypes())
@@ -135,17 +268,22 @@ func Build(ctx cnb.BuildContext) (cnb.BuildResult, error) {
 		return result, fmt.Errorf("creating model layer: %w", err)
 	}
 
-	// Install Python and dependencies using uv
-	uvEnv, err := installerEnv(ctx, pythonPath)
-	if err != nil {
-		return result, fmt.Errorf("configuring uv environment: %w", err)
-	}
-	installer := python.NewInstallerWithPathAndEnv("uv", uvEnv)
-	if err := installer.SetupFromConda(context.Background(), dependencies.conda, pythonPath, venvPath); err != nil {
-		return result, fmt.Errorf("setting up Python: %w", err)
+	// Phase 2: Download full model for storage type
+	if modelSource.Type == "storage" && store != nil {
+		fmt.Printf("Downloading full model from %s...\n", store.String())
+		if err := store.Download(context.Background(), modelPath); err != nil {
+			return result, fmt.Errorf("downloading model: %w", err)
+		}
+		// Update model path for copyModel
+		model = mlflow.NewLocalModel(modelPath)
+	} else {
+		// Copy model to layer (for local/registry types)
+		if err := copyModel(model, modelPath); err != nil {
+			return result, fmt.Errorf("copying model: %w", err)
+		}
 	}
 
-	// Write Python SBOM
+	// Get Python version for metadata
 	pythonVersion := dependencies.conda.PythonVersion()
 	if pythonVersion == "" {
 		pythonVersion = python.DefaultPythonVersion
@@ -159,38 +297,6 @@ func Build(ctx cnb.BuildContext) (cnb.BuildResult, error) {
 			"flavor":         flavor,
 			"python_version": pythonVersion,
 		},
-	}
-	if err := sbom.WritePythonSBOM(ctx.LayersDir, pythonVersion); err != nil {
-		return result, fmt.Errorf("writing python SBOM: %w", err)
-	}
-
-	if dependencies.requirementsPath != "" {
-		fmt.Printf("conda.yaml not found; installing dependencies from %s\n", filepath.Base(dependencies.requirementsPath))
-		if err := installer.InstallDepsFromFile(context.Background(), venvPath, dependencies.requirementsPath); err != nil {
-			return result, fmt.Errorf("installing dependencies from requirements.txt: %w", err)
-		}
-	}
-
-	// Write venv SBOM
-	packages, err := sbom.ParseVenv(venvPath)
-	if err != nil {
-		return result, fmt.Errorf("parsing venv for SBOM: %w", err)
-	}
-	if err := sbom.WriteLayerSBOM(ctx.LayersDir, layer.VenvLayerName, packages); err != nil {
-		return result, fmt.Errorf("writing venv SBOM: %w", err)
-	}
-
-	// Configure PATH for build and launch
-	if err := cnb.PrependToPath(pythonPath, filepath.Join(pythonPath, "bin")); err != nil {
-		return result, fmt.Errorf("configuring PATH: %w", err)
-	}
-	if err := cnb.PrependToPath(venvPath, filepath.Join(venvPath, "bin")); err != nil {
-		return result, fmt.Errorf("configuring PATH: %w", err)
-	}
-
-	// Copy model to layer
-	if err := copyModel(model, modelPath); err != nil {
-		return result, fmt.Errorf("copying model: %w", err)
 	}
 
 	// Create model-settings.json for mlserver
@@ -293,10 +399,11 @@ func envValue(name string) (string, bool) {
 
 // modelSource represents the source of the model.
 type modelSource struct {
-	Type    string // "local" or "registry"
-	Path    string // Local path (for local models)
-	Name    string // Model name (for registry models)
-	Version string // Model version or stage (for registry models)
+	Type        string // "local", "registry", or "storage" (s3/local path)
+	Path        string // Local path (for local models) or storage path
+	Name        string // Model name (for registry models or labels)
+	Version     string // Model version or stage (for registry models)
+	StorageType string // "s3" or "local" for storage type models
 }
 
 type dependencySource struct {
@@ -313,6 +420,19 @@ var newModelDownloader = func() (modelDownloader, error) {
 }
 
 func determineModelSource(ctx cnb.BuildContext) (*modelSource, error) {
+	// Check for storage path (s3:// or local path via BP_MLFLOW_MODEL_PATH)
+	if storageType, path, ok := detect.DetectStoragePath(); ok {
+		name := getEnvWithDefault(EnvModelName, "model")
+		version := getEnvWithDefault(EnvModelVersion, "latest")
+		return &modelSource{
+			Type:        "storage",
+			Path:        path,
+			Name:        name,
+			Version:     version,
+			StorageType: storageType,
+		}, nil
+	}
+
 	// models:/... in BP_MLFLOW_MODEL_PATH explicitly selects registry source.
 	if name, version, ok, err := detect.DetectFromModelPathEnv(); err != nil {
 		return nil, err
@@ -357,9 +477,22 @@ func determineModelSource(ctx cnb.BuildContext) (*modelSource, error) {
 	)
 }
 
+func getEnvWithDefault(envName, defaultValue string) string {
+	if value := os.Getenv(envName); value != "" {
+		return value
+	}
+	return defaultValue
+}
+
 func getModel(ctx cnb.BuildContext, source *modelSource) (*mlflow.Model, error) {
 	if source.Type == "local" {
 		return mlflow.NewLocalModel(source.Path), nil
+	}
+
+	if source.Type == "storage" {
+		// For storage type, model will be downloaded in Build function
+		// Return a model with path set to empty (will be set after download)
+		return &mlflow.Model{}, nil
 	}
 
 	// modctl reads MLflow credentials directly from environment:
