@@ -1,6 +1,6 @@
 # MLflow Model Buildpack
 
-CNCF Buildpack for building container images with ML models from MLflow Model Registry. Uses MLServer as runtime and installs Python dependencies via uv. Works with pack and custom Kubernetes operators in unprivileged mode.
+CNCF Buildpack for building container images with ML models. Supports local models and S3 storage paths. Uses MLServer as runtime and installs Python dependencies via uv. Works with pack and custom Kubernetes operators in unprivileged mode.
 
 ## Features
 
@@ -9,7 +9,9 @@ CNCF Buildpack for building container images with ML models from MLflow Model Re
 - **Auto flavor detection** — automatically selects the correct MLServer extension
 - **Fast dependency installation** — uses uv instead of pip
 - **Multi-architecture** — supports linux/amd64 and linux/arm64
-- **Layer caching** — reuses layers when model hasn't changed (UUID-based)
+- **Intelligent layer caching** — reuses layers based on model UUID and dependency hash
+- **S3 support** — build directly from S3 with AWS SDK integration
+- **Two-phase download** — metadata-first download for optimized cache decisions
 - **SBOM support** — generates CycloneDX SBOM for dependencies
 - **Image labels** — OCI and MLflow-specific labels on output images
 - **Versioned from git tags** — buildpack version follows repository tags
@@ -95,17 +97,24 @@ curl -X POST http://localhost:8080/v2/models/model/infer \
   -d @e2e/models/sklearn/test-request.json
 ```
 
-### Option 2: Model from MLflow Registry
+### Option 2: Model from S3
 
 ```bash
 pack build my-model-image \
   --builder localhost:5000/aagumin/mlserver-builder:$(git describe --tags --always --dirty) \
-  --env BP_MLFLOW_MODEL_PATH="models:/my-classifier/1" \
-  --env MLFLOW_TRACKING_URI="https://mlflow.example.com" \
-  --env MLFLOW_TRACKING_USERNAME="user" \
-  --env MLFLOW_TRACKING_PASSWORD="pass" \
+  --env BP_MLFLOW_MODEL_PATH="s3://my-bucket/models/my-classifier/v1" \
+  --env BP_MLFLOW_MODEL_NAME="my-classifier" \
+  --env BP_MLFLOW_MODEL_VERSION="1" \
+  --env AWS_ACCESS_KEY_ID="your-access-key" \
+  --env AWS_SECRET_ACCESS_KEY="your-secret-key" \
+  --env AWS_REGION="us-east-1" \
   --pull-policy never \
   --trust-builder
+```
+
+For custom S3 endpoints (MinIO, etc.):
+```bash
+--env AWS_ENDPOINT_URL="https://minio.example.com"
 ```
 
 ### Run and Test
@@ -149,47 +158,34 @@ make e2e       # Build+runtime checks for e2e models
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `BP_MLFLOW_MODEL_NAME` | Model name in Registry | — |
-| `BP_MLFLOW_MODEL_VERSION` | Model version | `latest` |
-| `BP_MLFLOW_MODEL_STAGE` | Model stage (Production, Staging) | — |
-| `BP_MLFLOW_MODEL_PATH` | Local path to model OR `models:/<name>[/<version-or-stage>]` for Registry | auto-detect |
+| `BP_MLFLOW_MODEL_PATH` | Path to model: `s3://bucket/path`, `/local/path`, or relative path | auto-detect |
+| `BP_MLFLOW_MODEL_NAME` | Model name (for image labels) | `model` |
+| `BP_MLFLOW_MODEL_VERSION` | Model version (for image labels) | `latest` |
+| `BP_MLFLOW_PREV_DEPS_HASH` | Previous dependency hash for cache optimization | — |
 | `BP_MLFLOW_WORK_DIR` | Scratch directory for downloads | `<layers>/work` |
 
-If `BP_MLFLOW_MODEL_PATH` starts with `models:/`, the buildpack downloads the model from Registry.
-Otherwise, local model is auto-detected by `MLmodel` file (root or recursive search).
-If multiple `MLmodel` files found, specify `BP_MLFLOW_MODEL_PATH`.
+### Path Detection
 
-### Service Bindings
+1. If `BP_MLFLOW_MODEL_PATH` starts with `s3://` → S3 storage
+2. If `BP_MLFLOW_MODEL_PATH` is an absolute path (`/...`) → Local absolute path
+3. If `BP_MLFLOW_MODEL_PATH` is a relative path → Relative to `--path`
+4. `MLmodel` in root of `--path` → Auto-detected
+5. Recursive search for single `MLmodel` under `--path`
 
-```
-/bindings/mlflow/
-├── type           # "mlflow"
-├── tracking_uri   # https://mlflow.example.com
-├── username       # (optional)
-├── password       # (optional)
-└── s3/            # S3 credentials (optional)
-    ├── endpoint
-    ├── access_key
-    └── secret_key
-```
+### S3 Authentication
 
-### Environment Variables (alternative to bindings)
+The buildpack uses standard AWS SDK authentication:
 
 ```bash
-# MLflow Registry
-export MLFLOW_TRACKING_URI="https://mlflow.example.com"
-export MLFLOW_TRACKING_USERNAME="your-username"
-export MLFLOW_TRACKING_PASSWORD="your-password"
-
-# S3 (for artifacts)
 export AWS_ACCESS_KEY_ID="your-access-key"
 export AWS_SECRET_ACCESS_KEY="your-secret-key"
 export AWS_REGION="us-east-1"
+export AWS_ENDPOINT_URL="https://minio.example.com"  # Optional: custom endpoint
 
 # Build
 pack build my-model \
   --builder ghcr.io/aagumin/mlserver-builder:latest \
-  --env BP_MLFLOW_MODEL_PATH="models:/my-classifier/Production"
+  --env BP_MLFLOW_MODEL_PATH="s3://bucket/models/v1"
 ```
 
 ## Buildpack Features
@@ -200,15 +196,29 @@ The buildpack provides and requires `mlflow-model` in the build plan during dete
 - Standalone operation (self-contained requires/provides)
 - Other buildpacks can depend on this buildpack
 
-### Layer Reuse
+### Layer Caching
 
-The buildpack automatically reuses cached layers when the model hasn't changed. Change detection uses `model_uuid` from the `MLmodel` file:
+The buildpack implements intelligent layer caching:
 
+**Local Models (UUID-based):**
 ```
 Model unchanged (UUID: abc123...), reusing cached layers
 ```
 
-This significantly speeds up repeated builds of the same model.
+**S3/Storage Models (Dependency Hash-based):**
+```
+Dependency hash: sha256:abc123...
+Previous hash: sha256:abc123...
+Dependencies unchanged, reusing cached Python and venv layers
+```
+
+For S3 models, the buildpack uses two-phase download:
+1. Download only metadata (MLmodel, conda.yaml, requirements.txt)
+2. Compute dependency hash and compare with cache
+3. Skip Python/venv rebuild if dependencies unchanged
+4. Download full model to model layer
+
+This significantly speeds up rebuilds when only model version changes.
 
 ### Image Labels
 

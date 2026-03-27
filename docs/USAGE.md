@@ -6,7 +6,7 @@ Complete guide for using the buildpack to package ML models into container image
 
 1. [Installation](#installation)
 2. [Basic Usage](#basic-usage)
-3. [Building with MLflow Registry](#building-with-mlflow-registry)
+3. [Building from S3](#building-from-s3)
 4. [Configuration](#configuration)
 5. [Inference](#inference)
 6. [Buildpack Features](#buildpack-features)
@@ -139,63 +139,43 @@ python3 -c 'import json,sys; print(json.load(sys.stdin)["outputs"][0]["data"])'
 
 ---
 
-## Building with MLflow Registry
+## Building from S3
 
-### Minimal Setup
+### Building with S3 Model Path
 
-Specify model path and MLflow credentials via environment variables:
+Build directly from models stored in S3:
 
 ```bash
-# MLflow credentials
-export MLFLOW_TRACKING_URI="https://mlflow.your-company.com"
-export MLFLOW_TRACKING_USERNAME="your-username"
-export MLFLOW_TRACKING_PASSWORD="your-password"
-
-# OR Databricks credentials
-export DATABRICKS_HOST="https://your-workspace.cloud.databricks.com"
-export DATABRICKS_TOKEN="your-token"
-
-# Build
 pack build my-model \
   --builder ghcr.io/aagumin/mlserver-builder:latest \
-  --env BP_MLFLOW_MODEL_PATH="models:/my-classifier/1"
+  --env BP_MLFLOW_MODEL_PATH="s3://my-bucket/models/my-model/v1" \
+  --env BP_MLFLOW_MODEL_NAME="my-model" \
+  --env BP_MLFLOW_MODEL_VERSION="1" \
+  --env AWS_ACCESS_KEY_ID="your-access-key" \
+  --env AWS_SECRET_ACCESS_KEY="your-secret-key" \
+  --env AWS_REGION="us-east-1"
 ```
 
-### Environment Variables
+### S3 Authentication
 
-**MLflow:**
-
-| Variable | Description |
-|----------|-------------|
-| `MLFLOW_TRACKING_URI` | MLflow server URL |
-| `MLFLOW_TRACKING_USERNAME` | Basic auth username |
-| `MLFLOW_TRACKING_PASSWORD` | Basic auth password |
-
-**Databricks:**
+The buildpack uses standard AWS SDK authentication:
 
 | Variable | Description |
 |----------|-------------|
-| `DATABRICKS_HOST` | Databricks workspace URL |
-| `DATABRICKS_TOKEN` | Personal access token |
-
-**S3 (for artifacts):**
-
-| Variable | Description |
-|----------|-------------|
-| `AWS_ACCESS_KEY_ID` | Access key |
-| `AWS_SECRET_ACCESS_KEY` | Secret key |
-| `AWS_REGION` | Region (default: us-east-1) |
+| `AWS_ACCESS_KEY_ID` | AWS access key |
+| `AWS_SECRET_ACCESS_KEY` | AWS secret key |
+| `AWS_REGION` | AWS region (default: us-east-1) |
 | `AWS_ENDPOINT_URL` | Custom S3 endpoint (MinIO, etc.) |
 
-### Full Build Command
+### Custom S3 Endpoints (MinIO, etc.)
 
 ```bash
-pack build my-registry-model \
+pack build my-model \
   --builder ghcr.io/aagumin/mlserver-builder:latest \
-  --env BP_MLFLOW_MODEL_PATH="models:/my-classifier/1" \
-  --env MLFLOW_TRACKING_URI="https://mlflow.company.com" \
-  --env MLFLOW_TRACKING_USERNAME="user" \
-  --env MLFLOW_TRACKING_PASSWORD="pass"
+  --env BP_MLFLOW_MODEL_PATH="s3://mlflow-models/my-model/1" \
+  --env AWS_ENDPOINT_URL="https://minio.example.com" \
+  --env AWS_ACCESS_KEY_ID="minioadmin" \
+  --env AWS_SECRET_ACCESS_KEY="minioadmin"
 ```
 
 ## Read-only Filesystem / Single Writable Root
@@ -282,15 +262,17 @@ The buildpack and helper layers use these variables to redirect all service writ
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `BP_MLFLOW_MODEL_PATH` | Yes* | Path to model: local path OR `models:/<name>[/<version-or-stage>]` |
+| `BP_MLFLOW_MODEL_PATH` | No | Path to model: `s3://bucket/path`, `/absolute/path`, or relative path within `--path` |
+| `BP_MLFLOW_MODEL_NAME` | No | Model name (used for image labels, default: "model") |
+| `BP_MLFLOW_MODEL_VERSION` | No | Model version (used for image labels, default: "latest") |
+| `BP_MLFLOW_PREV_DEPS_HASH` | No | Previous dependency hash for cache optimization (orchestrators) |
 
-*\* Only required when building from registry. For local model, auto-detected.*
-
-Local model detection:
-- if `BP_MLFLOW_MODEL_PATH` starts with `models:/`, buildpack uses Model Registry (local filesystem not scanned),
-- else first check `BP_MLFLOW_MODEL_PATH` (if set),
-- then `MLmodel` in root of `--path`,
-- then recursive search for single `MLmodel` under `--path`.
+**Model path detection priority:**
+1. If `BP_MLFLOW_MODEL_PATH` starts with `s3://` → S3 storage
+2. If `BP_MLFLOW_MODEL_PATH` is an absolute path (`/...`) → Local storage
+3. If `BP_MLFLOW_MODEL_PATH` is a relative path → Relative to `--path`
+4. `MLmodel` in root of `--path`
+5. Recursive search for single `MLmodel` under `--path`
 
 If multiple `MLmodel` files found, buildpack fails with ambiguity error and asks to specify `BP_MLFLOW_MODEL_PATH`.
 
@@ -452,15 +434,47 @@ This enables:
 
 ### Layer Reuse (Layer Caching)
 
-The buildpack automatically reuses cached layers when the model hasn't changed. Change detection uses `model_uuid` from the `MLmodel` file:
+The buildpack implements intelligent layer caching to speed up builds:
+
+#### Model UUID Caching (Local Models)
+
+For local models, the buildpack reuses cached layers when the model hasn't changed. Change detection uses `model_uuid` from the `MLmodel` file:
 
 ```
 Model unchanged (UUID: abc123...), reusing cached layers
 ```
 
-This significantly speeds up repeated builds of the same model.
+#### Dependency Hash Caching (S3/Storage Models)
 
-To force a rebuild, delete the cached layer or the model UUID will change when the model is retrained.
+For models from S3 or storage paths, the buildpack uses a two-phase download with dependency hash comparison:
+
+1. **Phase 1**: Download only metadata files (MLmodel, conda.yaml, requirements.txt)
+2. **Phase 2**: Compute dependency hash and compare with cached hash
+3. **Phase 3**: Skip rebuilding Python/venv layers if dependencies unchanged
+
+```
+Dependency hash: sha256:abc123...
+Previous hash: sha256:abc123...
+Dependencies unchanged, reusing cached Python and venv layers
+```
+
+This significantly speeds up rebuilds when only the model version changes but dependencies remain the same.
+
+#### Cache Optimization for Orchestrators
+
+Orchestrators like kpack can pass the previous dependency hash to optimize layer reuse:
+
+```bash
+pack build my-model \
+  --builder ghcr.io/aagumin/mlserver-builder:latest \
+  --env BP_MLFLOW_MODEL_PATH="s3://bucket/models/v2" \
+  --env BP_MLFLOW_PREV_DEPS_HASH="sha256:abc123..."
+```
+
+To force a full rebuild:
+- Delete the cached venv layer
+- Change dependency versions in conda.yaml or requirements.txt
+- Omit `BP_MLFLOW_PREV_DEPS_HASH`
 
 ### Image Labels
 
