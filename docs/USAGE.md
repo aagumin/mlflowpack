@@ -1,29 +1,29 @@
-# MLflow Model Buildpack: Руководство пользователя
+# MLflow Model Buildpack: User Guide
 
-Полное руководство по использованию buildpack для упаковки ML моделей в контейнерные образы.
+Complete guide for using the buildpack to package ML models into container images.
 
-## Содержание
+## Table of Contents
 
-1. [Установка](#установка)
-2. [Базовое использование](#базовое-использование)
-3. [Сборка с MLflow Registry](#сборка-с-mlflow-registry)
-4. [Конфигурация](#конфигурация)
-5. [Инференс](#инференс)
+1. [Installation](#installation)
+2. [Basic Usage](#basic-usage)
+3. [Building with MLflow Registry](#building-with-mlflow-registry)
+4. [Configuration](#configuration)
+5. [Inference](#inference)
 6. [Buildpack Features](#buildpack-features)
 7. [Troubleshooting](#troubleshooting)
 
 ---
 
-## Установка
+## Installation
 
-### Предварительные требования
+### Prerequisites
 
-| Инструмент | Версия | Назначение |
-|------------|--------|------------|
-| pack | >= 0.38.0 | CLI для работы с buildpacks |
-| Docker или Podman | любой | Container runtime |
+| Tool | Version | Purpose |
+|------|---------|---------|
+| pack | >= 0.38.0 | CLI for working with buildpacks |
+| Docker or Podman | any | Container runtime |
 
-### Установка pack
+### Installing pack
 
 **macOS:**
 ```bash
@@ -35,31 +35,31 @@ brew install pack
 # Ubuntu/Debian
 sudo apt-get update && sudo apt-get install -y pack
 
-# Или скачать бинарник
+# Or download binary
 (curl -sSL "https://github.com/buildpacks/pack/releases/download/v0.38.2/pack-v0.38.2-linux-$(uname -m | sed 's/x86_64/amd64/').tgz" | sudo tar -C /usr/local/bin/ --no-same-owner -xz pack)
 ```
 
-### Получение builder
+### Getting the Builder
 
-**Вариант 1: Собрать локально**
+**Option 1: Build locally**
 ```bash
 git clone https://github.com/aagumin/mlflowpack.git
 cd mlflowpack
 make builder
 ```
 
-**Вариант 2: Использовать готовый (когда опубликован)**
+**Option 2: Use pre-built (when published)**
 ```bash
-pack builder pull aagumin/mlserver-builder:0.1.0
+pack builder pull ghcr.io/aagumin/mlserver-builder:latest
 ```
 
 ---
 
-## Базовое использование
+## Basic Usage
 
-### Сценарий 1: Локальная модель
+### Scenario 1: Local Model
 
-Если у вас есть папка с MLflow моделью (с файлом `MLmodel`):
+If you have a folder with an MLflow model (with `MLmodel` file):
 
 ```
 my-model/
@@ -71,79 +71,79 @@ my-model/
 
 ```bash
 pack build my-model-image \
-  --builder aagumin/mlserver-builder:0.1.0 \
+  --builder ghcr.io/aagumin/mlserver-builder:latest \
   --path my-model
 ```
 
-### Сценарий 2: Полный e2e цикл на тестовых моделях (pyfunc + sklearn)
+### Scenario 2: Full e2e cycle on test models (pyfunc + sklearn)
 
-В репозитории есть две готовые MLflow модели:
+The repository contains two ready-to-use MLflow models:
 - `e2e/models/pyfunc` (`python_function`)
 - `e2e/models/sklearn` (`sklearn`)
 
-Их можно прогонять полностью через e2e-скрипты.
+You can run them through e2e scripts.
 
-#### Вариант A: полный цикл одной командой
+#### Option A: Full cycle with one command
 
 ```bash
-# 1) Собрать локальный builder
+# 1) Build local builder
 make builder
 
-# 2) Для обеих моделей выполнить:
-#    - упаковку образа через buildpack
-#    - запуск контейнера
-#    - проверку readiness (/v2/health/ready)
-#    - inference запрос
-#    - сравнение ответа с expected-response.json
+# 2) For both models execute:
+#    - build image via buildpack
+#    - run container
+#    - check readiness (/v2/health/ready)
+#    - inference request
+#    - compare response with expected-response.json
 make e2e
 ```
 
-#### Вариант B: полный цикл вручную (пример sklearn)
+#### Option B: Full cycle manually (sklearn example)
 
 ```bash
-# 1) Упаковать образ из e2e модели
+# 1) Build image from e2e model
 ./e2e/scripts/verify-build.sh sklearn
 
-# 2) Запустить контейнер
+# 2) Run container
 docker run --rm --name e2e-sklearn -p 8080:8080 \
   -e MLSERVER_PARALLEL_WORKERS=0 \
   aipack-e2e-sklearn:local
 ```
 
-Во втором терминале:
+In another terminal:
 
 ```bash
-# 3) Проверить readiness
+# 3) Check readiness
 curl -fsS http://localhost:8080/v2/health/ready
 
-# 4) Отправить inference request из тестового файла
+# 4) Send inference request from test file
 curl -fsS -X POST http://localhost:8080/v2/models/model/infer \
   -H "Content-Type: application/json" \
   -d @e2e/models/sklearn/test-request.json
 
-# 5) Быстро посмотреть предсказания (ожидается [0, 1])
+# 5) Quick preview of predictions (expected [0, 1])
 curl -fsS -X POST http://localhost:8080/v2/models/model/infer \
   -H "Content-Type: application/json" \
   -d @e2e/models/sklearn/test-request.json | \
 python3 -c 'import json,sys; print(json.load(sys.stdin)["outputs"][0]["data"])'
 ```
 
-#### Вариант C: полный цикл вручную (пример pyfunc)
+#### Option C: Full cycle manually (pyfunc example)
 
 ```bash
-# Build + run + readiness + infer + проверка expected-response.json
+# Build + run + readiness + infer + check expected-response.json
 ./e2e/scripts/verify-runtime.sh pyfunc
 
-# Ожидаемый inference output_data: [4.0, 5.0]
+# Expected inference output_data: [4.0, 5.0]
 ```
 
 ---
 
-## Сборка с MLflow Registry
+## Building with MLflow Registry
 
-### Минимальная настройка
+### Minimal Setup
 
-Укажите путь к модели и креды MLflow через переменные окружения:
+Specify model path and MLflow credentials via environment variables:
 
 ```bash
 # MLflow credentials
@@ -151,47 +151,47 @@ export MLFLOW_TRACKING_URI="https://mlflow.your-company.com"
 export MLFLOW_TRACKING_USERNAME="your-username"
 export MLFLOW_TRACKING_PASSWORD="your-password"
 
-# ИЛИ Databricks credentials
+# OR Databricks credentials
 export DATABRICKS_HOST="https://your-workspace.cloud.databricks.com"
 export DATABRICKS_TOKEN="your-token"
 
-# Сборка
+# Build
 pack build my-model \
-  --builder aagumin/mlserver-builder:0.1.0 \
+  --builder ghcr.io/aagumin/mlserver-builder:latest \
   --env BP_MLFLOW_MODEL_PATH="models:/my-classifier/1"
 ```
 
-### Переменные окружения
+### Environment Variables
 
 **MLflow:**
 
-| Переменная | Описание |
-|------------|----------|
-| `MLFLOW_TRACKING_URI` | URL MLflow сервера |
+| Variable | Description |
+|----------|-------------|
+| `MLFLOW_TRACKING_URI` | MLflow server URL |
 | `MLFLOW_TRACKING_USERNAME` | Basic auth username |
 | `MLFLOW_TRACKING_PASSWORD` | Basic auth password |
 
 **Databricks:**
 
-| Переменная | Описание |
-|------------|----------|
+| Variable | Description |
+|----------|-------------|
 | `DATABRICKS_HOST` | Databricks workspace URL |
 | `DATABRICKS_TOKEN` | Personal access token |
 
-**S3 (для артефактов):**
+**S3 (for artifacts):**
 
-| Переменная | Описание |
-|------------|----------|
+| Variable | Description |
+|----------|-------------|
 | `AWS_ACCESS_KEY_ID` | Access key |
 | `AWS_SECRET_ACCESS_KEY` | Secret key |
 | `AWS_REGION` | Region (default: us-east-1) |
 | `AWS_ENDPOINT_URL` | Custom S3 endpoint (MinIO, etc.) |
 
-### Полная команда сборки
+### Full Build Command
 
 ```bash
 pack build my-registry-model \
-  --builder aagumin/mlserver-builder:0.1.0 \
+  --builder ghcr.io/aagumin/mlserver-builder:latest \
   --env BP_MLFLOW_MODEL_PATH="models:/my-classifier/1" \
   --env MLFLOW_TRACKING_URI="https://mlflow.company.com" \
   --env MLFLOW_TRACKING_USERNAME="user" \
@@ -200,11 +200,11 @@ pack build my-registry-model \
 
 ## Read-only Filesystem / Single Writable Root
 
-Если вы запускаете buildpack в read-only filesystem, дайте lifecycle и buildpack один writable root и держите все служебные данные внутри него.
+If you run the buildpack in a read-only filesystem, provide the lifecycle and buildpack with a single writable root and keep all service data inside it.
 
-### Контракт для operator
+### Contract for Operator
 
-Для собственного оператора это рекомендуемая strict-mode схема. Она даёт намного более жёсткий контроль над layout и временными путями, чем `pack`.
+For a custom operator, this is the recommended strict-mode scheme. It provides much tighter control over layout and temporary paths than `pack`.
 
 ```text
 /work
@@ -217,7 +217,7 @@ pack build my-registry-model \
   /home
 ```
 
-Запускайте lifecycle с `CNB_*` путями внутри этого root и отдельным writable mount:
+Run lifecycle with `CNB_*` paths inside this root and a separate writable mount:
 
 ```bash
 CNB_APP_DIR=/work/app \
@@ -235,15 +235,15 @@ PIP_CACHE_DIR=/work/cache/pip \
 BP_MLFLOW_WORK_DIR=/work/layers/work
 ```
 
-`BP_MLFLOW_WORK_DIR` задаёт внутренний scratch root buildpack. Если переменная не задана, buildpack использует `<layers>/work`.
+`BP_MLFLOW_WORK_DIR` sets the buildpack's internal scratch root. If not set, the buildpack uses `<layers>/work`.
 
-### Best-effort для pack
+### Best-effort for pack
 
-`pack` можно использовать как совместимый режим, но с менее строгим контролем путей, чем у operator-controlled layout. В этом случае стоит смонтировать один writable root, передать его как `--workspace`, и явно задать служебные переменные:
+`pack` can be used as a compatible mode, but with less strict path control than operator-controlled layout. In this case, mount a single writable root, pass it as `--workspace`, and explicitly set service variables:
 
 ```bash
 pack build my-model-image \
-  --builder aagumin/mlserver-builder:0.1.0 \
+  --builder ghcr.io/aagumin/mlserver-builder:latest \
   --workspace /work/app \
   --volume "$PWD/.cnb-work:/work:rw" \
   --cache "type=build;format=bind;source=$PWD/.cnb-work/cache/build" \
@@ -258,50 +258,50 @@ pack build my-model-image \
   --env BP_MLFLOW_WORK_DIR=/work/layers/work
 ```
 
-### Управляемые переменные
+### Managed Variables
 
-Buildpack и helper-слой используют следующие переменные для переноса всех служебных записей в writable root:
+The buildpack and helper layers use these variables to redirect all service writes to writable root:
 
-| Переменная | Назначение |
-|------------|------------|
-| `TMPDIR` | Временные файлы для `uv` и других инструментов |
-| `TMP` | Дополнительный Windows/Unix alias для temp |
-| `TEMP` | Дополнительный alias для temp |
-| `HOME` | Домашний каталог для инструментов, которым нужен `~` |
-| `XDG_CACHE_HOME` | Базовый каталог cache для XDG-aware инструментов |
-| `UV_CACHE_DIR` | Cache `uv` |
-| `PIP_CACHE_DIR` | Cache pip |
-| `UV_PYTHON_INSTALL_DIR` | Каталог установки Python, управляемый `uv`; при ручном override должен совпадать с фактическим python layer path |
-| `BP_MLFLOW_WORK_DIR` | Внутренний scratch root buildpack |
+| Variable | Purpose |
+|----------|---------|
+| `TMPDIR` | Temporary files for `uv` and other tools |
+| `TMP` | Additional Windows/Unix alias for temp |
+| `TEMP` | Additional alias for temp |
+| `HOME` | Home directory for tools that need `~` |
+| `XDG_CACHE_HOME` | Base cache directory for XDG-aware tools |
+| `UV_CACHE_DIR` | `uv` cache |
+| `PIP_CACHE_DIR` | pip cache |
+| `UV_PYTHON_INSTALL_DIR` | Python installation directory managed by `uv`; if manually overridden must match actual python layer path |
+| `BP_MLFLOW_WORK_DIR` | Buildpack's internal scratch root |
 
 ---
 
-## Конфигурация
+## Configuration
 
-### Переменные окружения buildpack
+### Buildpack Environment Variables
 
-| Переменная | Обязательно | Описание |
-|------------|-------------|----------|
-| `BP_MLFLOW_MODEL_PATH` | Да* | Путь к модели: локальный путь ИЛИ `models:/<name>[/<version-or-stage>]` |
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `BP_MLFLOW_MODEL_PATH` | Yes* | Path to model: local path OR `models:/<name>[/<version-or-stage>]` |
 
-*\* Обязательно только при сборке из registry. При локальной модели определяется автоматически.*
+*\* Only required when building from registry. For local model, auto-detected.*
 
-Локальная модель теперь определяется так:
-- если `BP_MLFLOW_MODEL_PATH` начинается с `models:/`, buildpack использует Model Registry (локальная файловая система не сканируется),
-- иначе сначала `BP_MLFLOW_MODEL_PATH` (если задан),
-- затем `MLmodel` в корне `--path`,
-- затем рекурсивный поиск единственного `MLmodel` под `--path`.
+Local model detection:
+- if `BP_MLFLOW_MODEL_PATH` starts with `models:/`, buildpack uses Model Registry (local filesystem not scanned),
+- else first check `BP_MLFLOW_MODEL_PATH` (if set),
+- then `MLmodel` in root of `--path`,
+- then recursive search for single `MLmodel` under `--path`.
 
-Если найдено несколько `MLmodel`, buildpack завершится ошибкой неоднозначности и попросит указать `BP_MLFLOW_MODEL_PATH`.
+If multiple `MLmodel` files found, buildpack fails with ambiguity error and asks to specify `BP_MLFLOW_MODEL_PATH`.
 
-### Конфигурация модели (conda.yaml)
+### Model Configuration (conda.yaml)
 
-Buildpack читает `conda.yaml` из модели для определения:
+The buildpack reads `conda.yaml` from the model to determine:
 
-- Версии Python
-- Зависимостей pip
+- Python version
+- pip dependencies
 
-Пример:
+Example:
 ```yaml
 channels:
   - defaults
@@ -314,28 +314,28 @@ dependencies:
     - numpy>=1.24.0
 ```
 
-Если `conda.yaml` отсутствует, используется Python 3.10 по умолчанию.
-Если рядом есть `requirements.txt`, buildpack дополнительно установит зависимости из него (fallback режим).
+If `conda.yaml` is missing, Python 3.10 is used by default.
+If `requirements.txt` exists alongside, buildpack additionally installs dependencies from it (fallback mode).
 
 ---
 
-## Инференс
+## Inference
 
 ### HTTP API (V2 Protocol)
 
-MLServer реализует [V2 Inference Protocol](https://github.com/kserve/kserve/blob/master/docs/predict-api/v2/required_api.md).
+MLServer implements [V2 Inference Protocol](https://github.com/kserve/kserve/blob/master/docs/predict-api/v2/required_api.md).
 
-**Проверка readiness:**
+**Check readiness:**
 ```bash
 curl http://localhost:8080/v2/health/ready
 ```
 
-**Информация о модели:**
+**Model info:**
 ```bash
 curl http://localhost:8080/v2/models/model
 ```
 
-**Инференс:**
+**Inference:**
 ```bash
 curl -X POST http://localhost:8080/v2/models/model/infer \
   -H "Content-Type: application/json" \
@@ -350,7 +350,7 @@ curl -X POST http://localhost:8080/v2/models/model/infer \
   }'
 ```
 
-**Ответ:**
+**Response:**
 ```json
 {
   "id": "test-1",
@@ -367,20 +367,20 @@ curl -X POST http://localhost:8080/v2/models/model/infer \
 ### gRPC API
 
 ```bash
-# Установить grpcurl
+# Install grpcurl
 brew install grpcurl  # macOS
 
-# Список сервисов
+# List services
 grpcurl -plaintext localhost:9080 list
 
-# Инференс
+# Inference
 grpcurl -plaintext \
   -d '{"model_name": "model", "id": "test-1", "inputs": [{"name": "input-0", "shape": [1, 4], "datatype": "FP32", "contents": {"fp32_contents": [5.1, 3.5, 1.4, 0.2]}}]}' \
   localhost:9080 \
   inference.GRPCInferenceService/ModelInfer
 ```
 
-### Запуск в Kubernetes
+### Running in Kubernetes
 
 ```yaml
 apiVersion: apps/v1
@@ -432,62 +432,126 @@ spec:
 
 ---
 
+## Buildpack Features
+
+### Build Plan
+
+The buildpack provides and requires `mlflow-model` in the build plan during detect phase:
+
+```toml
+[[provides]]
+name = "mlflow-model"
+
+[[requires]]
+name = "mlflow-model"
+```
+
+This enables:
+- **Standalone operation**: Self-contained requires/provides allows the buildpack to work independently
+- **Extensibility**: Other buildpacks can depend on this one by requiring `mlflow-model`
+
+### Layer Reuse (Layer Caching)
+
+The buildpack automatically reuses cached layers when the model hasn't changed. Change detection uses `model_uuid` from the `MLmodel` file:
+
+```
+Model unchanged (UUID: abc123...), reusing cached layers
+```
+
+This significantly speeds up repeated builds of the same model.
+
+To force a rebuild, delete the cached layer or the model UUID will change when the model is retrained.
+
+### Image Labels
+
+The buildpack adds labels to the output image:
+
+| Label | Description |
+|-------|-------------|
+| `org.opencontainers.image.title` | Model name |
+| `org.opencontainers.image.version` | Model version |
+| `org.opencontainers.image.description` | Image description |
+| `io.github.aagumin.model-flavor` | Model flavor (sklearn, pyfunc, etc.) |
+| `io.github.aagumin.model-name` | Model name |
+| `io.github.aagumin.mlserver-runtime` | MLServer runtime |
+
+Check labels:
+
+```bash
+docker inspect --format='{{json .Config.Labels}}' my-model:latest | jq
+```
+
+### SBOM
+
+The buildpack generates CycloneDX Software Bill of Materials (SBOM):
+- Python packages from virtual environment
+- Model metadata
+
+SBOM is attached to the image and can be retrieved with:
+
+```bash
+pack inspect my-model:latest --sbom
+```
+
+---
+
 ## Troubleshooting
 
-### Buildpack не обнаруживает модель
+### Buildpack doesn't detect model
 
-**Симптом:** `Detect: fail`
+**Symptom:** `Detect: fail`
 
-**Решение:**
-- Убедитесь, что файл `MLmodel` существует в корне `--path`
-- Или установите переменную `BP_MLFLOW_MODEL_NAME`
+**Solution:**
+- Ensure `MLmodel` file exists in root of `--path`
+- Or set `BP_MLFLOW_MODEL_NAME` environment variable
+- Check for multiple `MLmodel` files (ambiguity)
 
-### Ошибка подключения к MLflow
+### MLflow connection error
 
-**Симптом:** `reading MLflow binding: MLflow binding not found`
+**Symptom:** `reading MLflow binding: MLflow binding not found`
 
-**Решение:**
-- Проверьте путь к bindings: `--volume $(pwd)/bindings:/bindings/mlflow`
-- Убедитесь, что файл `type` содержит `mlflow`
-- Проверьте содержимое: `cat bindings/mlflow/type`
+**Solution:**
+- Check bindings path: `--volume $(pwd)/bindings:/bindings/mlflow`
+- Ensure `type` file contains `mlflow`
+- Check contents: `cat bindings/mlflow/type`
 
-### Ошибка скачивания артефактов
+### Artifact download error
 
-**Симптом:** `downloading model: ...`
+**Symptom:** `downloading model: ...`
 
-**Решение:**
-- Проверьте S3 credentials в `bindings/mlflow/s3/`
-- Убедитесь, что endpoint правильный (с `https://`)
-- Проверьте доступ к bucket
+**Solution:**
+- Check S3 credentials in `bindings/mlflow/s3/`
+- Ensure endpoint is correct (with `https://`)
+- Check bucket access
 
-### Python версия не найдена
+### Python version not found
 
-**Симптом:** `installing Python: version X.Y not found`
+**Symptom:** `installing Python: version X.Y not found`
 
-**Решение:**
-- Используйте поддерживаемую версию Python (3.9-3.12)
-- Обновите `conda.yaml` в модели
+**Solution:**
+- Use supported Python version (3.9-3.12)
+- Update `conda.yaml` in model
 
-### Включение debug логов
+### Enable debug logging
 
 ```bash
 pack build my-model \
-  --builder aagumin/mlserver-builder:0.1.0 \
+  --builder ghcr.io/aagumin/mlserver-builder:latest \
   --path my-model \
   --env CNB_LOG_LEVEL=debug \
   -v
 ```
 
-### Проверка содержимого образа
+### Inspect image contents
 
 ```bash
-# Запустить shell в образе
+# Run shell in image
 docker run --rm -it --entrypoint /bin/bash my-model
 
-# Посмотреть слои
+# View layers
 ls -la /layers/
 
-# Проверить переменные окружения
+# Check environment variables
 env | grep MLSERVER
 env | grep PYTHON
 ```
@@ -496,33 +560,33 @@ env | grep PYTHON
 
 ## Release Process
 
-Создание нового тега триггерит автоматическую публикацию образов в GitHub Container Registry (ghcr.io).
+Creating a new tag triggers automatic image publishing to GitHub Container Registry (ghcr.io).
 
 ```bash
-# Создать и запушить тег
+# Create and push tag
 git tag v1.0.0
 git push origin v1.0.0
 ```
 
-### Публикуемые образы
+### Published Images
 
-| Образ | Теги |
+| Image | Tags |
 |-------|------|
-| `ghcr.io/aagumin/fedora-mlserver-build` | `VERSION`, `latest` (только stable) |
-| `ghcr.io/aagumin/fedora-mlserver-run` | `VERSION`, `latest` (только stable) |
-| `ghcr.io/aagumin/mlserver-builder` | `VERSION`, `latest` (только stable) |
+| `ghcr.io/aagumin/fedora-mlserver-build` | `VERSION`, `latest` (stable only) |
+| `ghcr.io/aagumin/fedora-mlserver-run` | `VERSION`, `latest` (stable only) |
+| `ghcr.io/aagumin/mlserver-builder` | `VERSION`, `latest` (stable only) |
 
-### Pre-release версии
+### Pre-release Versions
 
-Теги вида `v1.0.0-beta.1` или `v1.0.0-rc.2` публикуются без тега `latest`.
+Tags like `v1.0.0-beta.1` or `v1.0.0-rc.2` are published without `latest` tag.
 
-### Использование готового builder
+### Using Pre-built Builder
 
 ```bash
-# Stable версия
+# Stable version
 pack builder pull ghcr.io/aagumin/mlserver-builder:latest
 
-# Конкретная версия
+# Specific version
 pack builder pull ghcr.io/aagumin/mlserver-builder:1.0.0
 
 # Pre-release
@@ -531,44 +595,7 @@ pack builder pull ghcr.io/aagumin/mlserver-builder:1.0.0-beta.1
 
 ---
 
-## Buildpack Features
-
-### Build Plan
-
-Buildpack предоставляет `mlflow-model` в build plan во время фазы detect. Это позволяет другим buildpack-ам зависеть от этого.
-
-### Layer Reuse (Кэширование слоёв)
-
-Buildpack автоматически переиспользует закэшированные слои, если модель не изменилась. Определение изменений происходит по `model_uuid` из файла `MLmodel`:
-
-```
-Model unchanged (UUID: abc123...), reusing cached layers
-```
-
-Это значительно ускоряет повторные сборки той же модели.
-
-### Image Labels
-
-Buildpack добавляет метки (labels) к образу:
-
-| Label | Описание |
-|-------|----------|
-| `org.opencontainers.image.title` | Имя модели |
-| `org.opencontainers.image.version` | Версия модели |
-| `org.opencontainers.image.description` | Описание образа |
-| `io.github.aagumin.model-flavor` | Flavor модели (sklearn, pyfunc, etc.) |
-| `io.github.aagumin.model-name` | Имя модели |
-| `io.github.aagumin.mlserver-runtime` | MLServer runtime |
-
-Проверить метки:
-
-```bash
-docker inspect --format='{{json .Config.Labels}}' my-model:latest
-```
-
----
-
-## Ссылки
+## References
 
 - [Cloud Native Buildpacks](https://buildpacks.io/)
 - [MLServer Documentation](https://mlserver.readthedocs.io/)

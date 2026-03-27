@@ -1,16 +1,20 @@
 # MLflow Model Buildpack
 
-CNCF Buildpack для сборки container-образов с ML моделями из MLflow Model Registry.
+CNCF Buildpack for building container images with ML models from MLflow Model Registry. Uses MLServer as runtime and installs Python dependencies via uv. Works with pack and custom Kubernetes operators in unprivileged mode.
 
-## Особенности
+## Features
 
-- **Unprivileged сборка** — работает в rootless режиме без специальных привилегий
-- **MLServer runtime** — использует Seldon MLServer для инференса
-- **Автоопределение flavor** — автоматически выбирает нужный MLServer extension
-- **Быстрая установка зависимостей** — использует uv вместо pip
-- **Multi-architecture** — поддерживает linux/amd64 и linux/arm64
+- **Unprivileged builds** — works in rootless mode without special privileges
+- **MLServer runtime** — uses Seldon MLServer for inference
+- **Auto flavor detection** — automatically selects the correct MLServer extension
+- **Fast dependency installation** — uses uv instead of pip
+- **Multi-architecture** — supports linux/amd64 and linux/arm64
+- **Layer caching** — reuses layers when model hasn't changed (UUID-based)
+- **SBOM support** — generates CycloneDX SBOM for dependencies
+- **Image labels** — OCI and MLflow-specific labels on output images
+- **Versioned from git tags** — buildpack version follows repository tags
 
-## Поддерживаемые модели
+## Supported Models
 
 | Flavor | Pip Package | Runtime |
 |--------|-------------|---------|
@@ -21,17 +25,17 @@ CNCF Buildpack для сборки container-образов с ML моделям
 | pytorch | mlserver-torchserve | mlserver_torchserve.TorchServeModel |
 | transformers | mlserver-huggingface | mlserver_huggingface.HuggingFaceModel |
 
-## Быстрый старт
+## Quick Start
 
-### Предварительные требования
+### Prerequisites
 
-| Инструмент | Версия | Назначение |
-|------------|--------|------------|
-| [pack](https://buildpacks.io/docs/tools/pack/) | >= 0.38.0 | CLI для работы с buildpacks |
-| Docker или Podman | любой | Container runtime |
-| Go | >= 1.24 | Для разработки buildpack |
+| Tool | Version | Purpose |
+|------|---------|---------|
+| [pack](https://buildpacks.io/docs/tools/pack/) | >= 0.38.0 | CLI for working with buildpacks |
+| Docker or Podman | any | Container runtime |
+| Go | >= 1.24 | For buildpack development |
 
-### Установка
+### Installation
 
 ```bash
 # macOS
@@ -42,46 +46,56 @@ brew install pack
 # Go: https://go.dev/doc/install
 ```
 
-## Локальная сборка buildpack
+## Building the Buildpack Locally
 
 ```bash
-# Клонировать репозиторий
+# Clone repository
 git clone https://github.com/aagumin/mlflowpack.git
 cd mlflowpack
 
-# Собрать builder (stack images + buildpack package + builder)
+# Build builder (stack images + buildpack package + builder)
 make builder
 
-# Или пошагово:
-make build     # Скомпилировать buildpack binaries (amd64 + arm64)
-make test      # Запустить unit тесты
-make stack     # Собрать stack images (multi-arch)
-make package   # Упаковать buildpack
-make builder   # Создать builder image
+# Or step by step:
+make build     # Compile buildpack binaries (amd64 + arm64)
+make test      # Run unit tests
+make stack     # Build stack images (multi-arch)
+make package   # Package buildpack
+make builder   # Create builder image
 ```
 
-## Сборка образа с моделью
+The buildpack version is derived from git tags:
+```bash
+# Check current version
+git describe --tags --always --dirty
 
-### Вариант 1: Локальная модель (e2e пример)
+# Create a release tag
+git tag v1.0.0
+make package  # Buildpack will be versioned as v1.0.0
+```
+
+## Building a Model Image
+
+### Option 1: Local Model (e2e example)
 
 ```bash
-# Использовать тестовую модель из e2e
+# Use test model from e2e
 pack build my-sklearn-model:latest \
   --builder localhost:5000/aagumin/mlserver-builder:$(git describe --tags --always --dirty) \
   --path e2e/models/sklearn \
   --pull-policy never \
   --trust-builder
 
-# Запустить
+# Run
 docker run --rm -p 8080:8080 -e MLSERVER_PARALLEL_WORKERS=0 my-sklearn-model:latest
 
-# Тест инференса
+# Test inference
 curl -X POST http://localhost:8080/v2/models/model/infer \
   -H "Content-Type: application/json" \
   -d @e2e/models/sklearn/test-request.json
 ```
 
-### Вариант 2: Модель из MLflow Registry
+### Option 2: Model from MLflow Registry
 
 ```bash
 pack build my-model-image \
@@ -94,55 +108,56 @@ pack build my-model-image \
   --trust-builder
 ```
 
-### Запуск и тест
+### Run and Test
 
 ```bash
-# Проверить readiness
+# Check readiness
 curl http://localhost:8080/v2/health/ready
 
-# Произвольный инференс запрос
+# Arbitrary inference request
 curl -X POST http://localhost:8080/v2/models/model/infer \
   -H "Content-Type: application/json" \
   -d '{"inputs": [{"name": "input", "shape": [1, 4], "datatype": "FP32", "data": [[5.1, 3.5, 1.4, 0.2]]}]}'
 ```
 
-### E2E тестирование
+### E2E Testing
 
 ```bash
-# Полный e2e цикл (pyfunc + sklearn модели)
+# Full e2e cycle (pyfunc + sklearn models)
 make e2e
 
-# Или вручную
+# Or manually
 ./e2e/scripts/verify-build.sh sklearn
 ./e2e/scripts/verify-runtime.sh sklearn
 ```
 
-## Команды Makefile
+## Makefile Commands
 
 ```bash
-make build     # Собрать buildpack binaries (amd64 + arm64)
-make test      # Запустить unit тесты
-make lint      # Запустить linter
-make stack     # Собрать stack images (multi-arch)
-make package   # Упаковать buildpack
-make builder   # Создать builder (stack + package)
-make e2e       # Build+runtime проверки e2e моделей
+make build     # Build buildpack binaries (amd64 + arm64)
+make test      # Run unit tests
+make lint      # Run linter
+make stack     # Build stack images (multi-arch)
+make package   # Package buildpack (versioned from git tag)
+make builder   # Create builder (stack + package)
+make e2e       # Build+runtime checks for e2e models
 ```
 
-## Конфигурация
+## Configuration
 
-### Переменные окружения
+### Environment Variables
 
-| Переменная | Описание | По умолчанию |
-|------------|----------|--------------|
-| `BP_MLFLOW_MODEL_NAME` | Имя модели в Registry | — |
-| `BP_MLFLOW_MODEL_VERSION` | Версия модели | `latest` |
-| `BP_MLFLOW_MODEL_STAGE` | Stage модели (Production, Staging) | — |
-| `BP_MLFLOW_MODEL_PATH` | Локальный путь к модели ИЛИ `models:/<name>[/<version-or-stage>]` для Registry | auto-detect |
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `BP_MLFLOW_MODEL_NAME` | Model name in Registry | — |
+| `BP_MLFLOW_MODEL_VERSION` | Model version | `latest` |
+| `BP_MLFLOW_MODEL_STAGE` | Model stage (Production, Staging) | — |
+| `BP_MLFLOW_MODEL_PATH` | Local path to model OR `models:/<name>[/<version-or-stage>]` for Registry | auto-detect |
+| `BP_MLFLOW_WORK_DIR` | Scratch directory for downloads | `<layers>/work` |
 
-Если `BP_MLFLOW_MODEL_PATH` начинается с `models:/`, buildpack скачивает модель из Registry.
-Иначе локальная модель определяется автоматически по `MLmodel` (корень или рекурсивный поиск).
-Если найдено несколько `MLmodel`, укажите `BP_MLFLOW_MODEL_PATH`.
+If `BP_MLFLOW_MODEL_PATH` starts with `models:/`, the buildpack downloads the model from Registry.
+Otherwise, local model is auto-detected by `MLmodel` file (root or recursive search).
+If multiple `MLmodel` files found, specify `BP_MLFLOW_MODEL_PATH`.
 
 ### Service Bindings
 
@@ -158,7 +173,7 @@ make e2e       # Build+runtime проверки e2e моделей
     └── secret_key
 ```
 
-### Environment Variables (альтернатива bindings)
+### Environment Variables (alternative to bindings)
 
 ```bash
 # MLflow Registry
@@ -166,22 +181,65 @@ export MLFLOW_TRACKING_URI="https://mlflow.example.com"
 export MLFLOW_TRACKING_USERNAME="your-username"
 export MLFLOW_TRACKING_PASSWORD="your-password"
 
-# S3 (для артефактов)
+# S3 (for artifacts)
 export AWS_ACCESS_KEY_ID="your-access-key"
 export AWS_SECRET_ACCESS_KEY="your-secret-key"
 export AWS_REGION="us-east-1"
 
-# Сборка
+# Build
 pack build my-model \
-  --builder aagumin/mlserver-builder:0.1.0 \
+  --builder ghcr.io/aagumin/mlserver-builder:latest \
   --env BP_MLFLOW_MODEL_PATH="models:/my-classifier/Production"
 ```
 
-## Документация
+## Buildpack Features
 
-- [USAGE.md](docs/USAGE.md) — подробное руководство пользователя
-- [CONTRIBUTING.md](CONTRIBUTING.md) — руководство по разработке
+### Build Plan
 
-## Лицензия
+The buildpack provides and requires `mlflow-model` in the build plan during detect phase. This enables:
+- Standalone operation (self-contained requires/provides)
+- Other buildpacks can depend on this buildpack
+
+### Layer Reuse
+
+The buildpack automatically reuses cached layers when the model hasn't changed. Change detection uses `model_uuid` from the `MLmodel` file:
+
+```
+Model unchanged (UUID: abc123...), reusing cached layers
+```
+
+This significantly speeds up repeated builds of the same model.
+
+### Image Labels
+
+The buildpack adds labels to the output image:
+
+| Label | Description |
+|-------|-------------|
+| `org.opencontainers.image.title` | Model name |
+| `org.opencontainers.image.version` | Model version |
+| `org.opencontainers.image.description` | Image description |
+| `io.github.aagumin.model-flavor` | Model flavor (sklearn, pyfunc, etc.) |
+| `io.github.aagumin.model-name` | Model name |
+| `io.github.aagumin.mlserver-runtime` | MLServer runtime |
+
+Check labels:
+
+```bash
+docker inspect --format='{{json .Config.Labels}}' my-model:latest
+```
+
+### SBOM
+
+The buildpack generates CycloneDX SBOM for installed dependencies:
+- Python packages from venv
+- Model metadata
+
+## Documentation
+
+- [USAGE.md](docs/USAGE.md) — detailed user guide
+- [CONTRIBUTING.md](CONTRIBUTING.md) — development guide
+
+## License
 
 MIT

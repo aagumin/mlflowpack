@@ -1,14 +1,14 @@
 # Contributing to MLflow Model Buildpack
 
-Спасибо за интерес к проекту! Этот документ описывает процесс разработки и внесения изменений.
+Thanks for your interest in the project! This document describes the development process and how to contribute.
 
-## Соглашения
+## Conventions
 
-### Коммиты
+### Commits
 
-Проект следует [Conventional Commits v1.0.0](https://www.conventionalcommits.org/en/v1.0.0/).
+The project follows [Conventional Commits v1.0.0](https://www.conventionalcommits.org/en/v1.0.0/).
 
-Формат сообщения коммита:
+Commit message format:
 
 ```
 <type>(<scope>): <description>
@@ -18,16 +18,16 @@
 [optional footer(s)]
 ```
 
-**Типы:**
-- `feat` — новая функциональность
-- `fix` — исправление бага
-- `docs` — изменения в документации
-- `style` — форматирование, пропущенные точки с запятой
-- `refactor` — рефакторинг без изменения поведения
-- `test` — добавление или исправление тестов
-- `chore` — изменения в сборке, инструментах
+**Types:**
+- `feat` — new functionality
+- `fix` — bug fix
+- `docs` — documentation changes
+- `style` — formatting, missing semicolons
+- `refactor` — refactoring without behavior change
+- `test` — adding or fixing tests
+- `chore` — build, tool changes
 
-**Примеры:**
+**Examples:**
 
 ```bash
 feat(mlflow): add support for LightGBM flavor
@@ -38,33 +38,33 @@ refactor(build): simplify layer creation logic
 
 ### Go Code Style
 
-Проект следует [Uber Go Style Guide](https://github.com/uber-go/guide/blob/master/style.md).
+The project follows [Uber Go Style Guide](https://github.com/uber-go/guide/blob/master/style.md).
 
-Ключевые принципы:
-- Используйте `gofmt` и `goimports`
-- Избегайте неинформативных имён (data, info, thing)
-- Возвращайте интерфейсы, принимайте конкретные типы
-- Предпочитайте каналы вместо мьютексов для коммуникации
-- Используйте контекст для отмены операций
+Key principles:
+- Use `gofmt` and `goimports`
+- Avoid uninformative names (data, info, thing)
+- Return interfaces, accept concrete types
+- Prefer channels over mutexes for communication
+- Use context for cancellation
 
 ```bash
-# Установка линтеров
+# Install linters
 go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
 
-# Проверка
+# Check
 make lint
 ```
 
-## Разработка
+## Development
 
-### Предварительные требования
+### Prerequisites
 
 - **Go** >= 1.24
-- **Docker** или **Podman**
+- **Docker** or **Podman**
 - **pack** CLI >= 0.38.0
-- **Make** (опционально, но рекомендуется)
+- **Make** (optional, but recommended)
 
-### Установка инструментов
+### Installing Tools
 
 ```bash
 # macOS
@@ -75,83 +75,103 @@ brew install go pack
 # pack: https://buildpacks.io/docs/tools/pack/
 ```
 
-### Клонирование и сборка
+### Cloning and Building
 
 ```bash
 git clone https://github.com/aagumin/mlflowpack.git
 cd mlflowpack
 
-# Установить Go зависимости
+# Install Go dependencies
 cd buildpack && go mod download
 
-# Собрать binaries
+# Build binaries
 make build
 ```
 
-### Структура проекта
+### Project Structure
 
 ```
-aipack/
+mlflowpack/
 ├── buildpack/                   # CNB Buildpack
 │   ├── cmd/
-│   │   ├── detect/main.go       # Точка входа detect phase
-│   │   └── build/main.go        # Точка входа build phase
+│   │   ├── detect/main.go       # Detect phase entrypoint
+│   │   └── build/main.go        # Build phase entrypoint
 │   ├── internal/
-│   │   ├── cnb/                 # CNB API типы
-│   │   ├── detect/detector.go   # Логика детекции
-│   │   ├── build/builder.go     # Основная логика сборки
-│   │   ├── mlflow/              # MLflow client и парсеры
-│   │   ├── conda/parser.go      # Парсер conda.yaml
-│   │   ├── python/installer.go  # Установка Python через uv
-│   │   └── layer/layers.go      # Управление слоями
-│   ├── buildpack.toml
+│   │   ├── cnb/                 # CNB API types
+│   │   ├── detect/detector.go   # Detection logic
+│   │   ├── build/builder.go     # Main build logic
+│   │   ├── mlflow/              # MLflow client and parsers
+│   │   ├── conda/parser.go      # conda.yaml parser
+│   │   ├── python/installer.go  # Python installation via uv
+│   │   ├── sbom/                # SBOM generation
+│   │   └── layer/layers.go      # Layer management
+│   ├── buildpack.toml.template  # Template (versioned from git)
 │   └── go.mod
 ├── stack/
 │   ├── build/Dockerfile         # Build image
 │   └── run/Dockerfile           # Run image
-├── test-model/                  # Тестовая модель для локальной проверки
+├── e2e/                         # E2E tests and models
+│   ├── models/
+│   │   ├── pyfunc/              # python_function test model
+│   │   └── sklearn/             # sklearn test model
+│   └── scripts/
 ├── docs/
-│   └── plans/                   # Дизайн документы
+│   └── plans/                   # Design documents
 ├── Makefile
-└── builder.toml
+└── builder.toml.template
 ```
 
-### Сборка и тестирование
+### Building and Testing
 
 ```bash
-# Сборка buildpack
+# Build buildpack
 make build
 
-# Запуск unit тестов
+# Run unit tests
 make test
 
-# Линтинг
+# Linting
 make lint
 
-# Полный цикл: stack + package + builder
+# Full cycle: stack + package + builder
 make builder
 ```
 
-### Локальное тестирование с моделью
+### Versioning
+
+The buildpack version is derived from git tags:
 
 ```bash
-# Сборка тестового образа
-pack build test-mlflow-model \
-  --builder aagumin/mlserver-builder:<version> \
-  --path test-model
+# Check current version
+git describe --tags --always --dirty
 
-# Запуск контейнера
+# During packaging, buildpack.toml is generated from template
+# with the version injected
+make package
+```
+
+### Local Testing with Model
+
+```bash
+# Build test image
+pack build test-mlflow-model \
+  --builder localhost:5000/aagumin/mlserver-builder:$(git describe --tags --always --dirty) \
+  --path e2e/models/sklearn \
+  --pull-policy never \
+  --trust-builder
+
+# Run container
 docker run --rm -p 8080:8080 -e MLSERVER_PARALLEL_WORKERS=0 test-mlflow-model:latest
 
-# Тестирование предсказания
+# Test prediction
 curl -X POST http://localhost:8080/v2/models/model/infer \
   -H "Content-Type: application/json" \
   -d '{"inputs": [{"name": "input", "shape": [1, 4], "datatype": "FP32", "data": [[5.1, 3.5, 1.4, 0.2]]}]}'
 ```
 
-### Добавление нового MLflow flavor
+### Adding a New MLflow Flavor
 
-1. Добавьте маппинг в `buildpack/internal/mlflow/flavor.go`:
+1. Add mapping in `buildpack/internal/mlflow/flavor.go`:
 
    ```go
    var MLServerExtensions = map[string]MLServerExtension{
@@ -163,47 +183,48 @@ curl -X POST http://localhost:8080/v2/models/model/infer \
    }
    ```
 
-2. Обновите приоритет в `GetPrimaryFlavor()`
+2. Update priority in `GetPrimaryFlavor()`
 
-3. Обновите документацию (README.md, docs/USAGE.md)
+3. Update documentation (README.md, docs/USAGE.md)
 
-### Отладка
+### Debugging
 
-Включить debug логирование:
+Enable debug logging:
 
 ```bash
 pack build my-model \
-  --builder aagumin/mlserver-builder:0.1.0 \
-  --path test-model \
+  --builder localhost:5000/aagumin/mlserver-builder:$(git describe --tags --always --dirty) \
+  --path e2e/models/sklearn \
+  --pull-policy never \
   --env CNB_LOG_LEVEL=debug
 ```
 
-Проверить содержимое слоёв:
+Inspect layer contents:
 
 ```bash
-# Создать контейнер без запуска
+# Create container without running
 docker create --name debug my-model
 
-# Скопировать слои
+# Copy layers
 docker cp debug:/layers ./layers-debug
 
-# Посмотреть структуру
+# View structure
 find layers-debug -type f | head -50
 ```
 
 ## CI/CD
 
-Проект использует GitHub Actions для:
-- Запуска тестов при PR
-- Сборки и публикации образов при релизе
-- Линтинга кода
+The project uses GitHub Actions for:
+- Running tests on PR
+- Building and publishing images on release
+- Code linting
 
-## Вопросы и проблемы
+## Questions and Issues
 
-- **Баги**: Создайте issue с описанием проблемы и шагами воспроизведения
-- **Feature requests**: Создайте issue с описанием желаемой функциональности
-- **Вопросы**: Создайте discussion или issue с меткой `question`
+- **Bugs**: Create an issue with problem description and reproduction steps
+- **Feature requests**: Create an issue describing desired functionality
+- **Questions**: Create a discussion or issue with `question` label
 
-## Лицензия
+## License
 
-Внося изменения в проект, вы соглашаетесь, что ваш код будет распространяться под лицензией MIT.
+By contributing to the project, you agree that your code will be distributed under the MIT license.
