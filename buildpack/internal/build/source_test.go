@@ -60,44 +60,36 @@ func TestDetermineModelSource_ReturnsAmbiguousError(t *testing.T) {
 	}
 }
 
-func TestDetermineModelSource_FallsBackToRegistry(t *testing.T) {
+func TestDetermineModelSource_StoragePath(t *testing.T) {
 	appDir := t.TempDir()
-	t.Setenv("BP_MLFLOW_MODEL_NAME", "wine-model")
-	t.Setenv("BP_MLFLOW_MODEL_VERSION", "7")
+	t.Setenv(detect.EnvModelPath, "s3://my-bucket/models/v1")
+	t.Setenv("BP_MLFLOW_MODEL_NAME", "my-model")
+	t.Setenv("BP_MLFLOW_MODEL_VERSION", "1")
 
 	source, err := determineModelSource(cnb.BuildContext{AppDir: appDir})
 	if err != nil {
 		t.Fatalf("determineModelSource() error = %v", err)
 	}
-	if source.Type != "registry" {
-		t.Fatalf("Type = %q, want %q", source.Type, "registry")
+	if source.Type != "storage" {
+		t.Fatalf("Type = %q, want %q", source.Type, "storage")
 	}
-	if source.Name != "wine-model" {
-		t.Fatalf("Name = %q, want %q", source.Name, "wine-model")
+	if source.StorageType != "s3" {
+		t.Fatalf("StorageType = %q, want %q", source.StorageType, "s3")
 	}
-	if source.Version != "7" {
-		t.Fatalf("Version = %q, want %q", source.Version, "7")
+	if source.Path != "my-bucket/models/v1" {
+		t.Fatalf("Path = %q, want %q", source.Path, "my-bucket/models/v1")
+	}
+	if source.Name != "my-model" {
+		t.Fatalf("Name = %q, want %q", source.Name, "my-model")
 	}
 }
 
-func TestDetermineModelSource_PrefersModelsURIOverLocalFiles(t *testing.T) {
+func TestDetermineModelSource_NoModelFound(t *testing.T) {
 	appDir := t.TempDir()
-	writeMLmodelFile(t, filepath.Join(appDir, "models", "first"))
-	writeMLmodelFile(t, filepath.Join(appDir, "models", "second"))
-	t.Setenv(detect.EnvModelPath, "models:/wine-model/42")
 
-	source, err := determineModelSource(cnb.BuildContext{AppDir: appDir})
-	if err != nil {
-		t.Fatalf("determineModelSource() error = %v", err)
-	}
-	if source.Type != "registry" {
-		t.Fatalf("Type = %q, want %q", source.Type, "registry")
-	}
-	if source.Name != "wine-model" {
-		t.Fatalf("Name = %q, want %q", source.Name, "wine-model")
-	}
-	if source.Version != "42" {
-		t.Fatalf("Version = %q, want %q", source.Version, "42")
+	_, err := determineModelSource(cnb.BuildContext{AppDir: appDir})
+	if err == nil {
+		t.Fatal("expected error for no model found, got nil")
 	}
 }
 

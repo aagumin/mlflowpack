@@ -137,17 +137,10 @@ func Build(ctx cnb.BuildContext) (cnb.BuildResult, error) {
 			},
 		}
 	} else {
-		// Get model for local/registry types
+		// Get model for local type
 		model, err = getModel(ctx, modelSource)
 		if err != nil {
 			return result, err
-		}
-		if modelSource.Type == "registry" && model.Path != "" {
-			defer func() {
-				if cleanupErr := os.RemoveAll(model.Path); cleanupErr != nil {
-					fmt.Fprintf(os.Stderr, "warning: failed to remove temporary model directory %q: %v\n", model.Path, cleanupErr)
-				}
-			}()
 		}
 
 		// Parse MLmodel file to detect flavor
@@ -277,7 +270,7 @@ func Build(ctx cnb.BuildContext) (cnb.BuildResult, error) {
 		// Update model path for copyModel
 		model = mlflow.NewLocalModel(modelPath)
 	} else {
-		// Copy model to layer (for local/registry types)
+		// Copy model to layer (for local type)
 		if err := copyModel(model, modelPath); err != nil {
 			return result, fmt.Errorf("copying model: %w", err)
 		}
@@ -399,24 +392,16 @@ func envValue(name string) (string, bool) {
 
 // modelSource represents the source of the model.
 type modelSource struct {
-	Type        string // "local", "registry", or "storage" (s3/local path)
+	Type        string // "local" or "storage" (s3/local path)
 	Path        string // Local path (for local models) or storage path
-	Name        string // Model name (for registry models or labels)
-	Version     string // Model version or stage (for registry models)
+	Name        string // Model name (for image labels)
+	Version     string // Model version (for image labels)
 	StorageType string // "s3" or "local" for storage type models
 }
 
 type dependencySource struct {
 	conda            *conda.File
 	requirementsPath string
-}
-
-type modelDownloader interface {
-	DownloadModel(ctx context.Context, name, version, destDir string) (string, error)
-}
-
-var newModelDownloader = func() (modelDownloader, error) {
-	return mlflow.NewDownloader()
 }
 
 func determineModelSource(ctx cnb.BuildContext) (*modelSource, error) {
@@ -433,17 +418,6 @@ func determineModelSource(ctx cnb.BuildContext) (*modelSource, error) {
 		}, nil
 	}
 
-	// models:/... in BP_MLFLOW_MODEL_PATH explicitly selects registry source.
-	if name, version, ok, err := detect.DetectFromModelPathEnv(); err != nil {
-		return nil, err
-	} else if ok {
-		return &modelSource{
-			Type:    "registry",
-			Name:    name,
-			Version: version,
-		}, nil
-	}
-
 	// Check for local model directory (root, recursive, or BP_MLFLOW_MODEL_PATH).
 	localModelDir, err := detect.FindLocalModelDir(ctx.AppDir)
 	if err == nil {
@@ -457,21 +431,8 @@ func determineModelSource(ctx cnb.BuildContext) (*modelSource, error) {
 		return nil, err
 	}
 
-	// Check for registry model via environment variables
-	name, version, ok, err := detect.DetectFromEnv()
-	if err != nil {
-		return nil, err
-	}
-	if ok {
-		return &modelSource{
-			Type:    "registry",
-			Name:    name,
-			Version: version,
-		}, nil
-	}
-
 	return nil, fmt.Errorf(
-		"no model source found: provide %s (root or nested, or set %s) or set BP_MLFLOW_MODEL_NAME",
+		"no model source found: provide %s (root or nested, or set %s to s3://bucket/path or /absolute/path)",
 		detect.MLmodelFile,
 		detect.EnvModelPath,
 	)
@@ -495,35 +456,7 @@ func getModel(ctx cnb.BuildContext, source *modelSource) (*mlflow.Model, error) 
 		return &mlflow.Model{}, nil
 	}
 
-	// modctl reads MLflow credentials directly from environment:
-	// - MLFLOW_TRACKING_URI, MLFLOW_TRACKING_USERNAME, MLFLOW_TRACKING_PASSWORD
-	// - DATABRICKS_HOST, DATABRICKS_TOKEN
-	// S3 credentials are read from AWS_* env vars or ~/.aws/* files
-
-	// Create temp directory for download
-	tempDir, err := TempDir(ctx, "mlflow-model-")
-	if err != nil {
-		return nil, fmt.Errorf("creating temp directory: %w", err)
-	}
-
-	// Use modctl-based downloader
-	downloader, err := newModelDownloader()
-	if err != nil {
-		if removeErr := os.RemoveAll(tempDir); removeErr != nil {
-			return nil, errors.Join(fmt.Errorf("creating downloader: %w", err), fmt.Errorf("cleanup temp dir: %w", removeErr))
-		}
-		return nil, fmt.Errorf("creating downloader: %w", err)
-	}
-
-	downloadPath, err := downloader.DownloadModel(context.Background(), source.Name, source.Version, tempDir)
-	if err != nil {
-		if removeErr := os.RemoveAll(tempDir); removeErr != nil {
-			return nil, errors.Join(fmt.Errorf("downloading model: %w", err), fmt.Errorf("cleanup temp dir: %w", removeErr))
-		}
-		return nil, fmt.Errorf("downloading model: %w", err)
-	}
-
-	return mlflow.NewRegistryModel(downloadPath, source.Name, source.Version), nil
+	return nil, fmt.Errorf("unsupported model source type: %s", source.Type)
 }
 
 func parseConda(model *mlflow.Model) (*conda.File, error) {
