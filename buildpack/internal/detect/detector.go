@@ -96,6 +96,8 @@ func DetectFromEnv() (modelName, modelVersion string, ok bool, err error) {
 //
 //	models:/<model-name>
 //	models:/<model-name>/<version-or-stage>
+//
+// Deprecated: Use DetectStoragePath for s3:// and local paths.
 func DetectFromModelPathEnv() (modelName, modelVersion string, ok bool, err error) {
 	raw := strings.TrimSpace(os.Getenv(EnvModelPath))
 	if raw == "" {
@@ -129,4 +131,37 @@ func DetectFromModelPathEnv() (modelName, modelVersion string, ok bool, err erro
 	}
 
 	return modelName, modelVersion, true, nil
+}
+
+// DetectStoragePath detects a storage path from BP_MLFLOW_MODEL_PATH.
+// Returns (storageType, path, ok) where storageType is "s3" or "local".
+// Supported formats:
+//   - s3://bucket/path/to/model
+//   - /local/path/to/model
+//   - file:///local/path/to/model
+func DetectStoragePath() (storageType, path string, ok bool) {
+	raw := strings.TrimSpace(os.Getenv(EnvModelPath))
+	if raw == "" {
+		return "", "", false
+	}
+
+	// Check for S3 path
+	if strings.HasPrefix(raw, "s3://") {
+		normalized := strings.TrimPrefix(raw, "s3://")
+		return "s3", normalized, true
+	}
+
+	// Check for file:// URI
+	if strings.HasPrefix(raw, "file://") {
+		return "local", strings.TrimPrefix(raw, "file://"), true
+	}
+
+	// Check for deprecated models:/ prefix
+	if strings.HasPrefix(raw, ModelRegistryPrefix) {
+		// Deprecated - return false to indicate not supported
+		return "", "", false
+	}
+
+	// Assume local path
+	return "local", raw, true
 }

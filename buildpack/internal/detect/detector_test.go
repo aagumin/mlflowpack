@@ -275,3 +275,65 @@ func TestDetectFromModelPathEnv_SingleSlash(t *testing.T) {
 		})
 	}
 }
+
+func TestDetectStoragePath(t *testing.T) {
+	tests := []struct {
+		name     string
+		path     string
+		wantType string
+		wantPath string
+		wantOK   bool
+	}{
+		{
+			name:     "s3 path",
+			path:     "s3://bucket/models/v1",
+			wantType: "s3",
+			wantPath: "bucket/models/v1",
+			wantOK:   true,
+		},
+		{
+			name:     "local path",
+			path:     "/workspace/model",
+			wantType: "local",
+			wantPath: "/workspace/model",
+			wantOK:   true,
+		},
+		{
+			name:     "file uri",
+			path:     "file:///workspace/model",
+			wantType: "local",
+			wantPath: "/workspace/model",
+			wantOK:   true,
+		},
+		{
+			name:     "models:/ path (deprecated, should fail)",
+			path:     "models:/my-model/1",
+			wantType: "",
+			wantPath: "",
+			wantOK:   false,
+		},
+		{
+			name:     "empty path",
+			path:     "",
+			wantType: "",
+			wantPath: "",
+			wantOK:   false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv(EnvModelPath, tt.path)
+			gotType, gotPath, ok := DetectStoragePath()
+			if ok != tt.wantOK {
+				t.Errorf("DetectStoragePath() ok = %v, want %v", ok, tt.wantOK)
+			}
+			if gotType != tt.wantType {
+				t.Errorf("DetectStoragePath() type = %v, want %v", gotType, tt.wantType)
+			}
+			if gotPath != tt.wantPath {
+				t.Errorf("DetectStoragePath() path = %v, want %v", gotPath, tt.wantPath)
+			}
+		})
+	}
+}
