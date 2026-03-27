@@ -148,6 +148,22 @@ func TestDetect(t *testing.T) {
 			t.Fatal("Detect() = false, want true")
 		}
 	})
+
+	t.Run("s3 uri in model path env skips local filesystem detection", func(t *testing.T) {
+		appDir := t.TempDir()
+		// No local model files - S3 model should be detected via DetectStoragePath in build phase
+		t.Setenv(EnvModelPath, "s3://bucket/path/to/model")
+		t.Setenv("BP_MLFLOW_MODEL_NAME", "s3-model") // Needed for detect to pass
+		buildPlanPath := filepath.Join(t.TempDir(), "buildplan.toml")
+
+		res, err := Detect(cnb.DetectContext{AppDir: appDir, BuildPlanPath: buildPlanPath})
+		if err != nil {
+			t.Fatalf("Detect() error = %v", err)
+		}
+		if !res.Pass {
+			t.Fatal("Detect() = false, want true (S3 path should be handled like registry path)")
+		}
+	})
 }
 
 func TestDetectFromModelPathEnv(t *testing.T) {

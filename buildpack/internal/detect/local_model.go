@@ -65,7 +65,15 @@ func modelDirFromEnv(appDir string) (string, bool, error) {
 	if raw == "" {
 		return "", false, nil
 	}
+	// Skip non-local paths: registry models and storage URIs
 	if strings.HasPrefix(raw, ModelRegistryPrefix) {
+		return "", false, nil
+	}
+	if strings.HasPrefix(raw, "s3://") {
+		return "", false, nil
+	}
+	if strings.HasPrefix(raw, "file://") {
+		// file:// URIs are handled by DetectStoragePath, treat as non-local here
 		return "", false, nil
 	}
 
