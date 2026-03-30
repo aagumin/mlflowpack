@@ -22,17 +22,6 @@ import (
 	"github.com/aagumin/mlflowpack/internal/storage"
 )
 
-const (
-	// EnvModelName is the environment variable for model name.
-	EnvModelName = "BP_MLFLOW_MODEL_NAME"
-
-	// EnvModelVersion is the environment variable for model version.
-	EnvModelVersion = "BP_MLFLOW_MODEL_VERSION"
-
-	// EnvModelStage is the environment variable for model stage.
-	EnvModelStage = "BP_MLFLOW_MODEL_STAGE"
-)
-
 // cachedModelUUID returns the model UUID from cached model layer metadata.
 func cachedModelUUID(layersDir string) string {
 	meta, err := cnb.ReadLayerToml(layersDir, layer.ModelLayerName)
@@ -407,13 +396,11 @@ type dependencySource struct {
 func determineModelSource(ctx cnb.BuildContext) (*modelSource, error) {
 	// Check for storage path (s3:// or local path via BP_MLFLOW_MODEL_PATH)
 	if storageType, path, ok := detect.DetectStoragePath(); ok {
-		name := getEnvWithDefault(EnvModelName, "model")
-		version := getEnvWithDefault(EnvModelVersion, "latest")
 		return &modelSource{
 			Type:        "storage",
 			Path:        path,
-			Name:        name,
-			Version:     version,
+			Name:        "model",
+			Version:     "latest",
 			StorageType: storageType,
 		}, nil
 	}
@@ -436,13 +423,6 @@ func determineModelSource(ctx cnb.BuildContext) (*modelSource, error) {
 		detect.MLmodelFile,
 		detect.EnvModelPath,
 	)
-}
-
-func getEnvWithDefault(envName, defaultValue string) string {
-	if value := os.Getenv(envName); value != "" {
-		return value
-	}
-	return defaultValue
 }
 
 func getModel(ctx cnb.BuildContext, source *modelSource) (*mlflow.Model, error) {

@@ -63,8 +63,6 @@ func TestDetermineModelSource_ReturnsAmbiguousError(t *testing.T) {
 func TestDetermineModelSource_StoragePath(t *testing.T) {
 	appDir := t.TempDir()
 	t.Setenv(detect.EnvModelPath, "s3://my-bucket/models/v1")
-	t.Setenv("BP_MLFLOW_MODEL_NAME", "my-model")
-	t.Setenv("BP_MLFLOW_MODEL_VERSION", "1")
 
 	source, err := determineModelSource(cnb.BuildContext{AppDir: appDir})
 	if err != nil {
@@ -79,8 +77,8 @@ func TestDetermineModelSource_StoragePath(t *testing.T) {
 	if source.Path != "my-bucket/models/v1" {
 		t.Fatalf("Path = %q, want %q", source.Path, "my-bucket/models/v1")
 	}
-	if source.Name != "my-model" {
-		t.Fatalf("Name = %q, want %q", source.Name, "my-model")
+	if source.Name != "model" {
+		t.Fatalf("Name = %q, want %q", source.Name, "model")
 	}
 }
 

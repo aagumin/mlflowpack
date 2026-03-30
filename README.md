@@ -103,8 +103,6 @@ curl -X POST http://localhost:8080/v2/models/model/infer \
 pack build my-model-image \
   --builder localhost:5000/aagumin/mlserver-builder:$(git describe --tags --always --dirty) \
   --env BP_MLFLOW_MODEL_PATH="s3://my-bucket/models/my-classifier/v1" \
-  --env BP_MLFLOW_MODEL_NAME="my-classifier" \
-  --env BP_MLFLOW_MODEL_VERSION="1" \
   --env AWS_ACCESS_KEY_ID="your-access-key" \
   --env AWS_SECRET_ACCESS_KEY="your-secret-key" \
   --env AWS_REGION="us-east-1" \
@@ -158,9 +156,7 @@ make e2e       # Build+runtime checks for e2e models
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `BP_MLFLOW_MODEL_PATH` | Path to model: `s3://bucket/path`, `/local/path`, or relative path | auto-detect |
-| `BP_MLFLOW_MODEL_NAME` | Model name (for image labels) | `model` |
-| `BP_MLFLOW_MODEL_VERSION` | Model version (for image labels) | `latest` |
+| `BP_MLFLOW_MODEL_PATH` | Path to model: `s3://bucket/path`, `file:///path`, or relative path | auto-detect |
 | `BP_MLFLOW_PREV_DEPS_HASH` | Previous dependency hash for cache optimization | — |
 | `BP_MLFLOW_WORK_DIR` | Scratch directory for downloads | `<layers>/work` |
 

@@ -23,12 +23,6 @@ func FindLocalModelDir(appDir string) (string, error) {
 	if appDir == "" {
 		return "", fmt.Errorf("app directory is empty")
 	}
-	if _, _, ok, err := DetectFromModelPathEnv(); err != nil {
-		return "", err
-	} else if ok {
-		// models:/... explicitly switches to registry mode, so local source is absent.
-		return "", ErrLocalModelNotFound
-	}
 
 	if dir, ok, err := modelDirFromEnv(appDir); ok || err != nil {
 		return dir, err
@@ -65,15 +59,16 @@ func modelDirFromEnv(appDir string) (string, bool, error) {
 	if raw == "" {
 		return "", false, nil
 	}
-	// Skip non-local paths: registry models and storage URIs
-	if strings.HasPrefix(raw, ModelRegistryPrefix) {
-		return "", false, nil
-	}
+	// Skip non-local paths: storage URIs and absolute paths
 	if strings.HasPrefix(raw, "s3://") {
 		return "", false, nil
 	}
 	if strings.HasPrefix(raw, "file://") {
 		// file:// URIs are handled by DetectStoragePath, treat as non-local here
+		return "", false, nil
+	}
+	// Absolute paths are handled by DetectStoragePath
+	if filepath.IsAbs(raw) {
 		return "", false, nil
 	}
 

@@ -149,8 +149,6 @@ Build directly from models stored in S3:
 pack build my-model \
   --builder ghcr.io/aagumin/mlserver-builder:latest \
   --env BP_MLFLOW_MODEL_PATH="s3://my-bucket/models/my-model/v1" \
-  --env BP_MLFLOW_MODEL_NAME="my-model" \
-  --env BP_MLFLOW_MODEL_VERSION="1" \
   --env AWS_ACCESS_KEY_ID="your-access-key" \
   --env AWS_SECRET_ACCESS_KEY="your-secret-key" \
   --env AWS_REGION="us-east-1"
@@ -262,9 +260,7 @@ The buildpack and helper layers use these variables to redirect all service writ
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `BP_MLFLOW_MODEL_PATH` | No | Path to model: `s3://bucket/path`, `/absolute/path`, or relative path within `--path` |
-| `BP_MLFLOW_MODEL_NAME` | No | Model name (used for image labels, default: "model") |
-| `BP_MLFLOW_MODEL_VERSION` | No | Model version (used for image labels, default: "latest") |
+| `BP_MLFLOW_MODEL_PATH` | No | Path to model: `s3://bucket/path`, `file:///path`, or relative path within `--path` |
 | `BP_MLFLOW_PREV_DEPS_HASH` | No | Previous dependency hash for cache optimization (orchestrators) |
 
 **Model path detection priority:**
@@ -517,7 +513,7 @@ pack inspect my-model:latest --sbom
 
 **Solution:**
 - Ensure `MLmodel` file exists in root of `--path`
-- Or set `BP_MLFLOW_MODEL_NAME` environment variable
+- Or set `BP_MLFLOW_MODEL_PATH` to `s3://bucket/path` or `file:///path`
 - Check for multiple `MLmodel` files (ambiguity)
 
 ### MLflow connection error

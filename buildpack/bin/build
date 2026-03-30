@@ -1,7 +1,0 @@
-#!/usr/bin/env bash
-ARCH=$(uname -m)
-case "$ARCH" in
-  x86_64|amd64) exec "$(dirname "$0")/linux/amd64/build" "$@" ;;
-  aarch64|arm64) exec "$(dirname "$0")/linux/arm64/build" "$@" ;;
-  *) echo "Unsupported architecture: $ARCH" >&2; exit 1 ;;
-esac
