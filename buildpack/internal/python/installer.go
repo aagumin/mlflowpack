@@ -91,11 +91,17 @@ func (i *Installer) InstallPython(ctx context.Context, version, installDir strin
 		version = DefaultPythonVersion
 	}
 
-	// Check if Python is already installed
-	if pythonBin, err := findPythonBinary(installDir); err == nil {
-		// Verify the installed version matches the requested version
-		if installedVersion := extractPythonVersion(pythonBin); installedVersion == version {
-			fmt.Printf("Python %s already installed at %s, skipping installation\n", version, installDir)
+	// Check if Python is already installed using uv python find
+	// First update shell shims, then find the Python binary
+	findCmd := i.command(ctx, "python", "find", version)
+	findCmd.Stdout = nil // Capture output instead of printing
+	findCmd.Stderr = nil
+	output, err := findCmd.Output()
+	if err == nil && len(output) > 0 {
+		// Python found, verify it exists
+		pythonPath := strings.TrimSpace(string(output))
+		if _, statErr := os.Stat(pythonPath); statErr == nil {
+			fmt.Printf("Python %s already installed at %s, skipping installation\n", version, pythonPath)
 			return nil
 		}
 	}
@@ -117,9 +123,17 @@ func (i *Installer) InstallPython(ctx context.Context, version, installDir strin
 
 // extractPythonVersion extracts the Python version from the binary path.
 // The path format is: <dir>/cpython-<version>-<platform>/bin/python3.x
+// It resolves symlinks to get the actual version (e.g., cpython-3.10 -> cpython-3.10.18).
 func extractPythonVersion(pythonBin string) string {
 	// Walk up to find the cpython directory
 	dir := filepath.Dir(filepath.Dir(pythonBin))
+
+	// Resolve symlink if it's one (cpython-3.10 -> cpython-3.10.18)
+	resolvedDir, err := filepath.EvalSymlinks(dir)
+	if err == nil {
+		dir = resolvedDir
+	}
+
 	dirName := filepath.Base(dir)
 
 	// Parse cpython-3.10.18-linux-aarch64-gnu format

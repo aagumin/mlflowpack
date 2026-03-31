@@ -2,6 +2,7 @@ package python
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -203,16 +204,32 @@ func TestInstallPython_SkipsExistingInstallation(t *testing.T) {
 		t.Fatalf("write python bin: %v", err)
 	}
 
-	// Create a fake uv that would fail if called
-	uvPath := filepath.Join(t.TempDir(), "uv-fail")
-	uvScript := "#!/bin/sh\nexit 1\n"
+	// Create a fake uv that handles "python find" but fails on "python install"
+	uvPath := filepath.Join(t.TempDir(), "uv")
+	uvScript := fmt.Sprintf(`#!/bin/sh
+case "$1 $2" in
+    "python find")
+        # Return the path to existing Python
+        echo "%s"
+        exit 0
+        ;;
+    "python install")
+        # Should not be called - fail if it is
+        echo "ERROR: python install should not be called" >&2
+        exit 1
+        ;;
+    *)
+        exit 1
+        ;;
+esac
+`, pythonBin)
 	if err := os.WriteFile(uvPath, []byte(uvScript), 0o755); err != nil {
 		t.Fatalf("write fake uv: %v", err)
 	}
 
 	installer := NewInstallerWithPath(uvPath)
 
-	// This should NOT call uv because Python already exists
+	// This should NOT call uv install because Python already exists
 	err := installer.InstallPython(context.Background(), "3.10.18", pythonDir)
 	if err != nil {
 		t.Errorf("InstallPython() error = %v, want nil (should skip installation)", err)
@@ -229,22 +246,38 @@ func TestInstallPython_InstallsWhenVersionMismatch(t *testing.T) {
 		t.Fatalf("mkdir: %v", err)
 	}
 
-	// Create fake python binary
+	// Create fake python binary for 3.10.18
 	pythonBin := filepath.Join(binDir, "python3.10")
 	if err := os.WriteFile(pythonBin, []byte("#!/bin/sh\necho 'Python 3.10.18'"), 0o755); err != nil {
 		t.Fatalf("write python bin: %v", err)
 	}
 
-	// Create a fake uv that succeeds
-	uvPath := filepath.Join(t.TempDir(), "uv-ok")
-	uvScript := "#!/bin/sh\nexit 0\n"
+	// Create a fake uv that:
+	// - Returns empty for "python find 3.11" (version not found)
+	// - Succeeds for "python install"
+	uvPath := filepath.Join(t.TempDir(), "uv")
+	uvScript := `#!/bin/sh
+case "$1 $2" in
+    "python find")
+        # Python 3.11 not found, return empty
+        exit 1
+        ;;
+    "python install")
+        # Installation succeeds
+        exit 0
+        ;;
+    *)
+        exit 0
+        ;;
+esac
+`
 	if err := os.WriteFile(uvPath, []byte(uvScript), 0o755); err != nil {
 		t.Fatalf("write fake uv: %v", err)
 	}
 
 	installer := NewInstallerWithPath(uvPath)
 
-	// This SHOULD call uv because version mismatch (3.11 vs 3.10.18)
+	// This SHOULD call uv install because version mismatch (3.11 vs 3.10.18)
 	err := installer.InstallPython(context.Background(), "3.11", pythonDir)
 	if err != nil {
 		t.Errorf("InstallPython() error = %v, want nil", err)
