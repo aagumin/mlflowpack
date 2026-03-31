@@ -48,7 +48,9 @@ func (s *S3Storage) InitClient(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("loading AWS config: %w", err)
 	}
-	s.client = s3.NewFromConfig(cfg)
+	s.client = s3.NewFromConfig(cfg, func(o *s3.Options) {
+		o.DisableLogOutputChecksumValidationSkipped = true
+	})
 	return nil
 }
 

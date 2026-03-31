@@ -91,6 +91,15 @@ func (i *Installer) InstallPython(ctx context.Context, version, installDir strin
 		version = DefaultPythonVersion
 	}
 
+	// Check if Python is already installed
+	if pythonBin, err := findPythonBinary(installDir); err == nil {
+		// Verify the installed version matches the requested version
+		if installedVersion := extractPythonVersion(pythonBin); installedVersion == version {
+			fmt.Printf("Python %s already installed at %s, skipping installation\n", version, installDir)
+			return nil
+		}
+	}
+
 	fmt.Printf("Installing Python %s\n", version)
 
 	cmd := i.command(ctx,
@@ -104,6 +113,27 @@ func (i *Installer) InstallPython(ctx context.Context, version, installDir strin
 	}
 
 	return nil
+}
+
+// extractPythonVersion extracts the Python version from the binary path.
+// The path format is: <dir>/cpython-<version>-<platform>/bin/python3.x
+func extractPythonVersion(pythonBin string) string {
+	// Walk up to find the cpython directory
+	dir := filepath.Dir(filepath.Dir(pythonBin))
+	dirName := filepath.Base(dir)
+
+	// Parse cpython-3.10.18-linux-aarch64-gnu format
+	if !strings.HasPrefix(dirName, "cpython-") {
+		return ""
+	}
+
+	// Extract version: cpython-3.10.18-... -> 3.10.18
+	parts := strings.Split(strings.TrimPrefix(dirName, "cpython-"), "-")
+	if len(parts) < 2 {
+		return ""
+	}
+
+	return parts[0]
 }
 
 // CreateVenv creates a virtual environment using uv with Python from installDir.
@@ -244,7 +274,7 @@ func findPythonBinary(pythonDir string) (string, error) {
 			// Look for python3 or python3.x
 			if files, err := os.ReadDir(binPath); err == nil {
 				for _, f := range files {
-					if f.Name() == "python3" || (len(f.Name()) > 7 && f.Name()[:7] == "python3.") {
+					if f.Name() == "python3" || (len(f.Name()) > 8 && f.Name()[:8] == "python3.") {
 						return filepath.Join(binPath, f.Name()), nil
 					}
 				}

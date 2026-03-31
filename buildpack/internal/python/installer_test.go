@@ -138,3 +138,115 @@ func readEnvDump(t *testing.T, path string) map[string]string {
 
 	return env
 }
+
+func TestExtractPythonVersion(t *testing.T) {
+	tests := []struct {
+		name     string
+		path     string
+		expected string
+	}{
+		{
+			name:     "standard format",
+			path:     "/layers/python/cpython-3.10.18-linux-aarch64-gnu/bin/python3.10",
+			expected: "3.10.18",
+		},
+		{
+			name:     "x86_64 format",
+			path:     "/layers/python/cpython-3.11.4-linux-x86_64-gnu/bin/python3",
+			expected: "3.11.4",
+		},
+		{
+			name:     "macOS format",
+			path:     "/layers/python/cpython-3.12.0-macos-aarch64/bin/python3.12",
+			expected: "3.12.0",
+		},
+		{
+			name:     "short version",
+			path:     "/layers/python/cpython-3.10-linux-aarch64-gnu/bin/python3",
+			expected: "3.10",
+		},
+		{
+			name:     "invalid path - no cpython prefix",
+			path:     "/layers/python/python-3.10/bin/python3",
+			expected: "",
+		},
+		{
+			name:     "invalid path - too few parts",
+			path:     "/layers/python/cpython/bin/python3",
+			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := extractPythonVersion(tt.path)
+			if got != tt.expected {
+				t.Errorf("extractPythonVersion(%q) = %q, want %q", tt.path, got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestInstallPython_SkipsExistingInstallation(t *testing.T) {
+	// Create a fake Python installation directory
+	pythonDir := t.TempDir()
+	cpythonDir := filepath.Join(pythonDir, "cpython-3.10.18-linux-aarch64-gnu")
+	binDir := filepath.Join(cpythonDir, "bin")
+
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+
+	// Create fake python binary
+	pythonBin := filepath.Join(binDir, "python3.10")
+	if err := os.WriteFile(pythonBin, []byte("#!/bin/sh\necho 'Python 3.10.18'"), 0o755); err != nil {
+		t.Fatalf("write python bin: %v", err)
+	}
+
+	// Create a fake uv that would fail if called
+	uvPath := filepath.Join(t.TempDir(), "uv-fail")
+	uvScript := "#!/bin/sh\nexit 1\n"
+	if err := os.WriteFile(uvPath, []byte(uvScript), 0o755); err != nil {
+		t.Fatalf("write fake uv: %v", err)
+	}
+
+	installer := NewInstallerWithPath(uvPath)
+
+	// This should NOT call uv because Python already exists
+	err := installer.InstallPython(context.Background(), "3.10.18", pythonDir)
+	if err != nil {
+		t.Errorf("InstallPython() error = %v, want nil (should skip installation)", err)
+	}
+}
+
+func TestInstallPython_InstallsWhenVersionMismatch(t *testing.T) {
+	// Create a fake Python installation with different version
+	pythonDir := t.TempDir()
+	cpythonDir := filepath.Join(pythonDir, "cpython-3.10.18-linux-aarch64-gnu")
+	binDir := filepath.Join(cpythonDir, "bin")
+
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+
+	// Create fake python binary
+	pythonBin := filepath.Join(binDir, "python3.10")
+	if err := os.WriteFile(pythonBin, []byte("#!/bin/sh\necho 'Python 3.10.18'"), 0o755); err != nil {
+		t.Fatalf("write python bin: %v", err)
+	}
+
+	// Create a fake uv that succeeds
+	uvPath := filepath.Join(t.TempDir(), "uv-ok")
+	uvScript := "#!/bin/sh\nexit 0\n"
+	if err := os.WriteFile(uvPath, []byte(uvScript), 0o755); err != nil {
+		t.Fatalf("write fake uv: %v", err)
+	}
+
+	installer := NewInstallerWithPath(uvPath)
+
+	// This SHOULD call uv because version mismatch (3.11 vs 3.10.18)
+	err := installer.InstallPython(context.Background(), "3.11", pythonDir)
+	if err != nil {
+		t.Errorf("InstallPython() error = %v, want nil", err)
+	}
+}
