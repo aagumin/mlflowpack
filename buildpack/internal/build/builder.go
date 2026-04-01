@@ -35,7 +35,10 @@ func cachedModelUUID(layersDir string) string {
 	if !ok {
 		return ""
 	}
-	uuid, _ := metadata["model_uuid"].(string)
+	uuid, ok := metadata["model_uuid"].(string)
+	if !ok {
+		return ""
+	}
 	return uuid
 }
 
@@ -62,7 +65,11 @@ func Build(ctx cnb.BuildContext) (cnb.BuildResult, error) {
 		if err != nil {
 			return result, fmt.Errorf("creating temp metadata dir: %w", err)
 		}
-		defer os.RemoveAll(tempMetaDir)
+		defer func() {
+			if err := os.RemoveAll(tempMetaDir); err != nil {
+				fmt.Printf("Warning: failed to cleanup temp directory: %v\n", err)
+			}
+		}()
 
 		// Create storage backend
 		var storagePath string
@@ -177,7 +184,7 @@ func Build(ctx cnb.BuildContext) (cnb.BuildResult, error) {
 
 	// Check if we need to rebuild Python and venv layers
 	rebuildDeps := modelSource.Type == "storage" ||
-		result.Layers[layer.PythonLayerName].Types.Launch == false
+		!result.Layers[layer.PythonLayerName].Types.Launch
 
 	var pythonPath, venvPath string
 
@@ -240,7 +247,6 @@ func Build(ctx cnb.BuildContext) (cnb.BuildResult, error) {
 		}
 	} else {
 		// Use existing layer paths
-		pythonPath = filepath.Join(ctx.LayersDir, layer.PythonLayerName)
 		venvPath = filepath.Join(ctx.LayersDir, layer.VenvLayerName)
 	}
 

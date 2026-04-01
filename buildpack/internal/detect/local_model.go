@@ -64,8 +64,7 @@ func modelDirFromEnv(appDir string) (string, bool, error) {
 		return "", false, nil
 	}
 	if strings.HasPrefix(raw, "file://") {
-		// file:// URIs are handled by DetectStoragePath, treat as non-local here
-		return "", false, nil
+		return "", false, nil // storage paths are handled by DetectStoragePath
 	}
 	// Absolute paths are handled by DetectStoragePath
 	if filepath.IsAbs(raw) {

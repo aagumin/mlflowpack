@@ -9,6 +9,10 @@ import (
 )
 
 func main() {
+	os.Exit(run())
+}
+
+func run() int {
 	// Build context from environment variables
 	ctx := cnb.DetectContext{
 		PlatformDir:   os.Getenv("CNB_PLATFORM_DIR"),
@@ -21,7 +25,7 @@ func main() {
 	wd, err := os.Getwd()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "ERROR: getting working directory: %v\n", err)
-		os.Exit(cnb.ExitCodeErr)
+		return cnb.ExitCodeErr
 	}
 	ctx.AppDir = wd
 
@@ -29,13 +33,13 @@ func main() {
 	result, err := detect.Detect(ctx)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "ERROR: %v\n", err)
-		os.Exit(cnb.ExitCodeErr)
+		return cnb.ExitCodeErr
 	}
 
 	if !result.Pass {
 		// Standard "fail" exit code - not an error, just doesn't match
-		os.Exit(cnb.ExitCodeFail)
+		return cnb.ExitCodeFail
 	}
 
-	// Detection passed - exit 0
+	return cnb.ExitCodePass
 }

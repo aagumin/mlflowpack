@@ -10,8 +10,8 @@ import (
 	"strings"
 )
 
-// metadataFiles is the list of files to download in metadata-only mode.
-var metadataFiles = []string{"MLmodel", "conda.yaml", "requirements.txt"}
+// _metadataFiles is the list of files to download in metadata-only mode.
+var _metadataFiles = []string{"MLmodel", "conda.yaml", "requirements.txt"}
 
 // LocalStorage implements Storage for local filesystem.
 type LocalStorage struct {
@@ -43,7 +43,7 @@ func (s *LocalStorage) DownloadMetadata(ctx context.Context, destDir string) err
 		return fmt.Errorf("creating dest dir: %w", err)
 	}
 
-	for _, file := range metadataFiles {
+	for _, file := range _metadataFiles {
 		srcPath := filepath.Join(s.path, file)
 		dstPath := filepath.Join(destDir, file)
 
@@ -89,13 +89,21 @@ func copyFile(src, dst string) error {
 	if err != nil {
 		return err
 	}
-	defer srcFile.Close()
+	defer func() {
+		if closeErr := srcFile.Close(); closeErr != nil {
+			fmt.Printf("Warning: failed to close source file %s: %v\n", src, closeErr)
+		}
+	}()
 
 	dstFile, err := os.Create(dst)
 	if err != nil {
 		return err
 	}
-	defer dstFile.Close()
+	defer func() {
+		if closeErr := dstFile.Close(); closeErr != nil {
+			fmt.Printf("Warning: failed to close destination file %s: %v\n", dst, closeErr)
+		}
+	}()
 
 	_, err = io.Copy(dstFile, srcFile)
 	return err
@@ -116,6 +124,12 @@ type Storage interface {
 	String() string
 }
 
+// Verify interface compliance at compile time.
+var (
+	_ Storage = (*LocalStorage)(nil)
+	_ Storage = (*S3Storage)(nil)
+)
+
 // ParsePath parses a model path and returns the storage type and normalized path.
 // Supported formats:
 //   - s3://bucket/path/to/model
@@ -128,7 +142,7 @@ func ParsePath(path string) (storageType, normalizedPath string, err error) {
 	}
 
 	if strings.HasPrefix(path, "s3://") {
-		// s3://bucket/path -> bucket/path
+		// Remove s3:// prefix and split into bucket/path
 		normalized := strings.TrimPrefix(path, "s3://")
 		parts := strings.SplitN(normalized, "/", 2)
 		if len(parts) < 2 || parts[1] == "" {

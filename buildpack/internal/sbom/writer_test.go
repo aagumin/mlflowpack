@@ -10,18 +10,14 @@ import (
 )
 
 func TestWriteLayerSBOM(t *testing.T) {
-	tmpDir, err := os.MkdirTemp("", "sbom-test")
-	if err != nil {
-		t.Fatalf("failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
 
 	packages := []sbom.Package{
 		{Name: "numpy", Version: "1.26.0", License: "BSD-3-Clause"},
 		{Name: "mlserver", Version: "1.3.0", License: "Apache-2.0"},
 	}
 
-	err = sbom.WriteLayerSBOM(tmpDir, "venv", packages)
+	err := sbom.WriteLayerSBOM(tmpDir, "venv", packages)
 	if err != nil {
 		t.Fatalf("failed to write SBOM: %v", err)
 	}
@@ -49,13 +45,9 @@ func TestWriteLayerSBOM(t *testing.T) {
 }
 
 func TestWritePythonSBOM(t *testing.T) {
-	tmpDir, err := os.MkdirTemp("", "sbom-test")
-	if err != nil {
-		t.Fatalf("failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
 
-	err = sbom.WritePythonSBOM(tmpDir, "3.10.13")
+	err := sbom.WritePythonSBOM(tmpDir, "3.10.13")
 	if err != nil {
 		t.Fatalf("failed to write Python SBOM: %v", err)
 	}

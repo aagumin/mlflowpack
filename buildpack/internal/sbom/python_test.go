@@ -2,6 +2,7 @@
 package sbom_test
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -66,9 +67,15 @@ func TestParseVenv(t *testing.T) {
 
 func TestMain(m *testing.M) {
 	// Create test fixtures
-	os.MkdirAll(filepath.Join("testdata", "numpy-1.26.0.dist-info"), 0755)
-	os.MkdirAll(filepath.Join("testdata", "sample-venv", "lib", "python3.10", "site-packages", "numpy-1.26.0.dist-info"), 0755)
-	os.MkdirAll(filepath.Join("testdata", "sample-venv", "lib", "python3.10", "site-packages", "mlserver-1.3.0.dist-info"), 0755)
+	if err := os.MkdirAll(filepath.Join("testdata", "numpy-1.26.0.dist-info"), 0o755); err != nil {
+		panic(err)
+	}
+	if err := os.MkdirAll(filepath.Join("testdata", "sample-venv", "lib", "python3.10", "site-packages", "numpy-1.26.0.dist-info"), 0o755); err != nil {
+		panic(err)
+	}
+	if err := os.MkdirAll(filepath.Join("testdata", "sample-venv", "lib", "python3.10", "site-packages", "mlserver-1.3.0.dist-info"), 0o755); err != nil {
+		panic(err)
+	}
 
 	numpyMeta := `Metadata-Version: 2.1
 Name: numpy
@@ -76,18 +83,26 @@ Version: 1.26.0
 License: BSD-3-Clause
 Home-page: https://numpy.org
 `
-	os.WriteFile(filepath.Join("testdata", "numpy-1.26.0.dist-info", "METADATA"), []byte(numpyMeta), 0644)
-	os.WriteFile(filepath.Join("testdata", "sample-venv", "lib", "python3.10", "site-packages", "numpy-1.26.0.dist-info", "METADATA"), []byte(numpyMeta), 0644)
+	if err := os.WriteFile(filepath.Join("testdata", "numpy-1.26.0.dist-info", "METADATA"), []byte(numpyMeta), 0o644); err != nil {
+		panic(err)
+	}
+	if err := os.WriteFile(filepath.Join("testdata", "sample-venv", "lib", "python3.10", "site-packages", "numpy-1.26.0.dist-info", "METADATA"), []byte(numpyMeta), 0o644); err != nil {
+		panic(err)
+	}
 
 	mlserverMeta := `Metadata-Version: 2.1
 Name: mlserver
 Version: 1.3.0
 License: Apache-2.0
 `
-	os.WriteFile(filepath.Join("testdata", "sample-venv", "lib", "python3.10", "site-packages", "mlserver-1.3.0.dist-info", "METADATA"), []byte(mlserverMeta), 0644)
+	if err := os.WriteFile(filepath.Join("testdata", "sample-venv", "lib", "python3.10", "site-packages", "mlserver-1.3.0.dist-info", "METADATA"), []byte(mlserverMeta), 0o644); err != nil {
+		panic(err)
+	}
 
 	code := m.Run()
 
-	os.RemoveAll("testdata")
+	if err := os.RemoveAll("testdata"); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: failed to cleanup testdata: %v\n", err)
+	}
 	os.Exit(code)
 }

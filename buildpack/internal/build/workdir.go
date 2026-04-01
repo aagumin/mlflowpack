@@ -20,6 +20,7 @@ func WorkDir(ctx cnb.BuildContext) (string, error) {
 		workDir = filepath.Join(ctx.LayersDir, "work")
 	}
 
+	// #nosec G703 -- workDir comes from build system environment, not user input
 	if err := os.MkdirAll(workDir, 0o755); err != nil {
 		return "", fmt.Errorf("creating work directory %q: %w", workDir, err)
 	}

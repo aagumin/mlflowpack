@@ -29,20 +29,25 @@ func ParseMetadata(path string) (Package, error) {
 	if err != nil {
 		return Package{}, fmt.Errorf("opening metadata file: %w", err)
 	}
-	defer func() { _ = file.Close() }()
+	defer func() {
+		if closeErr := file.Close(); closeErr != nil {
+			fmt.Printf("Warning: failed to close metadata file %s: %v\n", path, closeErr)
+		}
+	}()
 
 	pkg := Package{}
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		line := scanner.Text()
 
-		if strings.HasPrefix(line, "Name:") {
+		switch {
+		case strings.HasPrefix(line, "Name:"):
 			pkg.Name = strings.TrimSpace(strings.TrimPrefix(line, "Name:"))
-		} else if strings.HasPrefix(line, "Version:") {
+		case strings.HasPrefix(line, "Version:"):
 			pkg.Version = strings.TrimSpace(strings.TrimPrefix(line, "Version:"))
-		} else if strings.HasPrefix(line, "License:") {
+		case strings.HasPrefix(line, "License:"):
 			pkg.License = strings.TrimSpace(strings.TrimPrefix(line, "License:"))
-		} else if strings.HasPrefix(line, "License-Expression:") {
+		case strings.HasPrefix(line, "License-Expression:"):
 			pkg.License = strings.TrimSpace(strings.TrimPrefix(line, "License-Expression:"))
 		}
 	}

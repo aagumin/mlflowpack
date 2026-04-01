@@ -55,7 +55,7 @@ func mergeEnv(base, overrides []string) []string {
 	}
 
 	result := append([]string(nil), base...)
-	index := make(map[string]int, len(result))
+	index := make(map[string]int, len(base)+len(overrides))
 	for i, item := range result {
 		key, _, ok := strings.Cut(item, "=")
 		if !ok {

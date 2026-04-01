@@ -27,7 +27,10 @@ func CachedDepsHash(layersDir string) string {
 	if !ok {
 		return ""
 	}
-	hash, _ := metadata["deps_hash"].(string)
+	hash, ok := metadata["deps_hash"].(string)
+	if !ok {
+		return ""
+	}
 	return hash
 }
 
@@ -44,7 +47,10 @@ func CachedPythonVersion(layersDir string) string {
 	if !ok {
 		return ""
 	}
-	version, _ := metadata["python_version"].(string)
+	version, ok := metadata["python_version"].(string)
+	if !ok {
+		return ""
+	}
 	return version
 }
 

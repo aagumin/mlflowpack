@@ -9,6 +9,13 @@ import (
 )
 
 func main() {
+	if err := run(); err != nil {
+		fmt.Fprintf(os.Stderr, "ERROR: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+func run() error {
 	// Build context from environment variables
 	ctx := cnb.BuildContext{
 		LayersDir:    os.Getenv("CNB_LAYERS_DIR"),
@@ -21,31 +28,27 @@ func main() {
 	// Get app directory (current working directory)
 	wd, err := os.Getwd()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "ERROR: getting working directory: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("getting working directory: %w", err)
 	}
 	ctx.AppDir = wd
 
 	// Run build
 	result, err := build.Build(ctx)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "ERROR: %v\n", err)
-		os.Exit(1)
+		return err
 	}
 
 	// Write layer TOML files
 	for layerName, metadata := range result.Layers {
 		if err := cnb.WriteLayerToml(ctx.LayersDir, layerName, metadata); err != nil {
-			fmt.Fprintf(os.Stderr, "ERROR: writing layer %s: %v\n", layerName, err)
-			os.Exit(1)
+			return fmt.Errorf("writing layer %s: %w", layerName, err)
 		}
 	}
 
 	// Write launch.toml
 	if err := cnb.WriteLaunchToml(ctx.LayersDir, result.Launch); err != nil {
-		fmt.Fprintf(os.Stderr, "ERROR: writing launch.toml: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("writing launch.toml: %w", err)
 	}
 
-	// Success - exit 0
+	return nil
 }

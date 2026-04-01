@@ -81,7 +81,7 @@ func (s *S3Storage) DownloadMetadata(ctx context.Context, destDir string) error 
 		return err
 	}
 
-	for _, file := range metadataFiles {
+	for _, file := range _metadataFiles {
 		key := s.keyPrefix + "/" + file
 		if err := s.downloadFile(ctx, key, destDir, file); err != nil {
 			// File doesn't exist, skip
@@ -155,7 +155,11 @@ func (s *S3Storage) downloadFile(ctx context.Context, key, destDir, relPath stri
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			fmt.Printf("Warning: failed to close response body: %v\n", closeErr)
+		}
+	}()
 
 	dstPath := filepath.Join(destDir, relPath)
 	if err := os.MkdirAll(filepath.Dir(dstPath), 0o755); err != nil {
@@ -166,7 +170,11 @@ func (s *S3Storage) downloadFile(ctx context.Context, key, destDir, relPath stri
 	if err != nil {
 		return err
 	}
-	defer dstFile.Close()
+	defer func() {
+		if closeErr := dstFile.Close(); closeErr != nil {
+			fmt.Printf("Warning: failed to close file %s: %v\n", dstPath, closeErr)
+		}
+	}()
 
 	_, err = io.Copy(dstFile, resp.Body)
 	return err
@@ -180,7 +188,11 @@ func (s *S3Storage) downloadFileWithProgress(ctx context.Context, key, destDir, 
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			fmt.Printf("Warning: failed to close response body: %v\n", closeErr)
+		}
+	}()
 
 	dstPath := filepath.Join(destDir, relPath)
 	if err := os.MkdirAll(filepath.Dir(dstPath), 0o755); err != nil {
@@ -191,7 +203,11 @@ func (s *S3Storage) downloadFileWithProgress(ctx context.Context, key, destDir, 
 	if err != nil {
 		return err
 	}
-	defer dstFile.Close()
+	defer func() {
+		if closeErr := dstFile.Close(); closeErr != nil {
+			fmt.Printf("Warning: failed to close file %s: %v\n", dstPath, closeErr)
+		}
+	}()
 
 	// Show file info with progress
 	fmt.Printf("    [%d/%d] %s (%s)\n", fileNum, totalFiles, relPath, formatSize(size))
