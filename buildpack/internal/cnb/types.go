@@ -77,7 +77,8 @@ type BuildPlan struct {
 
 // BuildPlanEntry represents a single provides/requires entry.
 type BuildPlanEntry struct {
-	Name string `toml:"name"`
+	Name     string                 `toml:"name"`
+	Metadata map[string]interface{} `toml:"metadata,omitempty"`
 }
 
 // Exit codes for detect phase.
