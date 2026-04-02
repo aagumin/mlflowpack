@@ -1,5 +1,4 @@
-// Package detect implements the CNB detect phase for MLflow models.
-package detect
+package mlflow
 
 import (
 	"errors"
@@ -11,13 +10,8 @@ import (
 	"github.com/aagumin/mlflowpack/internal/cnb"
 )
 
-const (
-	// MLmodelFile is the name of the MLflow model descriptor file.
-	MLmodelFile = "MLmodel"
-
-	// EnvModelPath points to a model location (s3://, file://, or local path).
-	EnvModelPath = "BP_MLFLOW_MODEL_PATH"
-)
+// EnvModelPath points to a model location (s3://, file://, or local path).
+const EnvModelPath = "BP_MLFLOW_MODEL_PATH"
 
 // Detect checks if an MLmodel file exists in the application directory
 // or a storage path is provided via BP_MLFLOW_MODEL_PATH.

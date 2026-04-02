@@ -1,23 +1,21 @@
-package build
+package mlflow
 
 import (
 	"os"
 	"path/filepath"
 	"testing"
-
-	"github.com/aagumin/mlflowpack/internal/mlflow"
 )
 
 func TestResolveDependencies_FallbackToRequirementsWhenNoConda(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	requirementsPath := filepath.Join(dir, mlflow.RequirementsFile)
+	requirementsPath := filepath.Join(dir, RequirementsFile)
 	if err := os.WriteFile(requirementsPath, []byte("pandas==2.2.0\n"), 0o644); err != nil {
 		t.Fatalf("write requirements.txt: %v", err)
 	}
 
-	model := mlflow.NewLocalModel(dir)
+	model := NewLocalModel(dir)
 
 	deps, err := resolveDependencies(model, "mlserver-sklearn")
 	if err != nil {
@@ -40,18 +38,18 @@ func TestResolveDependencies_CondaTakesPrecedenceOverRequirements(t *testing.T) 
 	t.Parallel()
 
 	dir := t.TempDir()
-	condaPath := filepath.Join(dir, mlflow.CondaFile)
+	condaPath := filepath.Join(dir, CondaFile)
 	condaYAML := []byte("dependencies:\n  - python=3.11\n  - pip:\n    - numpy==2.0.0\n")
 	if err := os.WriteFile(condaPath, condaYAML, 0o644); err != nil {
 		t.Fatalf("write conda.yaml: %v", err)
 	}
 
-	requirementsPath := filepath.Join(dir, mlflow.RequirementsFile)
+	requirementsPath := filepath.Join(dir, RequirementsFile)
 	if err := os.WriteFile(requirementsPath, []byte("pandas==2.2.0\n"), 0o644); err != nil {
 		t.Fatalf("write requirements.txt: %v", err)
 	}
 
-	model := mlflow.NewLocalModel(dir)
+	model := NewLocalModel(dir)
 
 	deps, err := resolveDependencies(model, "mlserver-sklearn")
 	if err != nil {
@@ -78,12 +76,12 @@ func TestResolveDependencies_ErrorsOnInvalidConda(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	condaPath := filepath.Join(dir, mlflow.CondaFile)
+	condaPath := filepath.Join(dir, CondaFile)
 	if err := os.WriteFile(condaPath, []byte("dependencies: ["), 0o644); err != nil {
 		t.Fatalf("write invalid conda.yaml: %v", err)
 	}
 
-	model := mlflow.NewLocalModel(dir)
+	model := NewLocalModel(dir)
 
 	_, err := resolveDependencies(model, "mlserver-sklearn")
 	if err == nil {

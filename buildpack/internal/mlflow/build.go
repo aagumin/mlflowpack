@@ -1,5 +1,4 @@
-// Package build implements the CNB build phase for MLflow models.
-package build
+package mlflow
 
 import (
 	"context"
@@ -14,9 +13,7 @@ import (
 	"github.com/aagumin/mlflowpack/internal/cnb"
 	"github.com/aagumin/mlflowpack/internal/conda"
 	"github.com/aagumin/mlflowpack/internal/deps"
-	"github.com/aagumin/mlflowpack/internal/detect"
 	"github.com/aagumin/mlflowpack/internal/layer"
-	"github.com/aagumin/mlflowpack/internal/mlflow"
 	"github.com/aagumin/mlflowpack/internal/python"
 	"github.com/aagumin/mlflowpack/internal/sbom"
 	"github.com/aagumin/mlflowpack/internal/storage"
@@ -54,7 +51,7 @@ func Build(ctx cnb.BuildContext) (cnb.BuildResult, error) {
 		return result, err
 	}
 
-	var model *mlflow.Model
+	var model *Model
 	var store storage.Storage
 	var tempMetaDir string
 
@@ -107,7 +104,7 @@ func Build(ctx cnb.BuildContext) (cnb.BuildResult, error) {
 		}
 
 		// Parse MLmodel from metadata
-		model = mlflow.NewLocalModel(tempMetaDir)
+		model = NewLocalModel(tempMetaDir)
 		if err := model.ParseMLmodel(); err != nil {
 			return result, fmt.Errorf("parsing MLmodel: %w", err)
 		}
@@ -263,7 +260,7 @@ func Build(ctx cnb.BuildContext) (cnb.BuildResult, error) {
 			return result, fmt.Errorf("downloading model: %w", err)
 		}
 		// Update model path for copyModel
-		model = mlflow.NewLocalModel(modelPath)
+		model = NewLocalModel(modelPath)
 	} else {
 		// Copy model to layer (for local type)
 		if err := copyModel(model, modelPath); err != nil {
@@ -401,7 +398,7 @@ type dependencySource struct {
 
 func determineModelSource(ctx cnb.BuildContext) (*modelSource, error) {
 	// Check for storage path (s3:// or local path via BP_MLFLOW_MODEL_PATH)
-	if storageType, path, ok := detect.DetectStoragePath(); ok {
+	if storageType, path, ok := DetectStoragePath(); ok {
 		return &modelSource{
 			Type:        "storage",
 			Path:        path,
@@ -412,7 +409,7 @@ func determineModelSource(ctx cnb.BuildContext) (*modelSource, error) {
 	}
 
 	// Check for local model directory (root, recursive, or BP_MLFLOW_MODEL_PATH).
-	localModelDir, err := detect.FindLocalModelDir(ctx.AppDir)
+	localModelDir, err := FindLocalModelDir(ctx.AppDir)
 	if err == nil {
 		return &modelSource{
 			Type: "local",
@@ -420,32 +417,32 @@ func determineModelSource(ctx cnb.BuildContext) (*modelSource, error) {
 			Name: "model",
 		}, nil
 	}
-	if !errors.Is(err, detect.ErrLocalModelNotFound) {
+	if !errors.Is(err, ErrLocalModelNotFound) {
 		return nil, err
 	}
 
 	return nil, fmt.Errorf(
 		"no model source found: provide %s (root or nested, or set %s to s3://bucket/path or /absolute/path)",
-		detect.MLmodelFile,
-		detect.EnvModelPath,
+		MLmodelFile,
+		EnvModelPath,
 	)
 }
 
-func getModel(ctx cnb.BuildContext, source *modelSource) (*mlflow.Model, error) {
+func getModel(ctx cnb.BuildContext, source *modelSource) (*Model, error) {
 	if source.Type == "local" {
-		return mlflow.NewLocalModel(source.Path), nil
+		return NewLocalModel(source.Path), nil
 	}
 
 	if source.Type == "storage" {
 		// For storage type, model will be downloaded in Build function
 		// Return a model with path set to empty (will be set after download)
-		return &mlflow.Model{}, nil
+		return &Model{}, nil
 	}
 
 	return nil, fmt.Errorf("unsupported model source type: %s", source.Type)
 }
 
-func parseConda(model *mlflow.Model) (*conda.File, error) {
+func parseConda(model *Model) (*conda.File, error) {
 	if !model.HasConda() {
 		// Return default conda file
 		return &conda.File{
@@ -458,7 +455,7 @@ func parseConda(model *mlflow.Model) (*conda.File, error) {
 	return conda.ParseFile(model.CondaPath())
 }
 
-func resolveDependencies(model *mlflow.Model, extensionPackage string) (dependencySource, error) {
+func resolveDependencies(model *Model, extensionPackage string) (dependencySource, error) {
 	condaFile, err := parseConda(model)
 	if err != nil {
 		return dependencySource{}, err
@@ -516,7 +513,7 @@ func addMLServerDependencies(condaFile *conda.File, extensionPackage string) {
 	})
 }
 
-func copyModel(model *mlflow.Model, destPath string) error {
+func copyModel(model *Model, destPath string) error {
 	if err := os.MkdirAll(destPath, 0o755); err != nil {
 		return err
 	}

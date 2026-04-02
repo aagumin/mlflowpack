@@ -1,5 +1,4 @@
-// Package build implements the CNB build phase for MLflow models.
-package build
+package mlflow
 
 import (
 	"os"
