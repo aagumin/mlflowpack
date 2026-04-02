@@ -79,3 +79,13 @@ func WriteBuildPlan(path string, plan BuildPlan) (err error) {
 
 	return toml.NewEncoder(f).Encode(plan)
 }
+
+// ReadBuildPlan reads a build plan from the specified path.
+func ReadBuildPlan(path string) (BuildPlan, error) {
+	var plan BuildPlan
+	_, err := toml.DecodeFile(path, &plan)
+	if err != nil {
+		return BuildPlan{}, fmt.Errorf("reading build plan: %w", err)
+	}
+	return plan, nil
+}
