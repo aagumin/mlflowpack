@@ -4,8 +4,11 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/aagumin/mlflowpack/internal/build"
 	"github.com/aagumin/mlflowpack/internal/cnb"
+	"github.com/aagumin/mlflowpack/internal/provider"
+
+	// Register providers via init()
+	_ "github.com/aagumin/mlflowpack/internal/mlflow"
 )
 
 func main() {
@@ -16,7 +19,6 @@ func main() {
 }
 
 func run() error {
-	// Build context from environment variables
 	ctx := cnb.BuildContext{
 		LayersDir:    os.Getenv("CNB_LAYERS_DIR"),
 		PlatformDir:  os.Getenv("CNB_PLATFORM_DIR"),
@@ -25,15 +27,35 @@ func run() error {
 		ExecEnv:      os.Getenv("CNB_EXEC_ENV"),
 	}
 
-	// Get app directory (current working directory)
 	wd, err := os.Getwd()
 	if err != nil {
 		return fmt.Errorf("getting working directory: %w", err)
 	}
 	ctx.AppDir = wd
 
-	// Run build
-	result, err := build.Build(ctx)
+	// Read provider name from build plan
+	plan, err := cnb.ReadBuildPlan(ctx.BpPlanPath)
+	if err != nil {
+		return fmt.Errorf("reading build plan: %w", err)
+	}
+
+	var providerName string
+	for _, req := range plan.Requires {
+		if v, ok := req.Metadata["provider"].(string); ok {
+			providerName = v
+			break
+		}
+	}
+	if providerName == "" {
+		return fmt.Errorf("build plan does not specify a provider")
+	}
+
+	p := provider.ByName(providerName)
+	if p == nil {
+		return fmt.Errorf("unknown provider: %s", providerName)
+	}
+
+	result, err := p.Build(ctx)
 	if err != nil {
 		return err
 	}
