@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -130,9 +131,9 @@ func (s *S3Storage) Download(ctx context.Context, destDir string) error {
 		}
 	}
 
-	fmt.Printf("  Model: s3://%s/%s\n", s.bucket, s.keyPrefix)
-	fmt.Printf("  Files: %d objects, total size: %s\n", len(objects), formatSize(totalSize))
-	fmt.Println("  Downloading:")
+	slog.Info("model location", "bucket", s.bucket, "prefix", s.keyPrefix)
+	slog.Info("model files", "count", len(objects), "total_size", formatSize(totalSize))
+	slog.Info("downloading files")
 
 	// Second pass: download with progress
 	var downloadedSize int64
@@ -143,7 +144,7 @@ func (s *S3Storage) Download(ctx context.Context, destDir string) error {
 		downloadedSize += obj.size
 	}
 
-	fmt.Printf("  Download complete: %s total\n", formatSize(downloadedSize))
+	slog.Info("download complete", "total_size", formatSize(downloadedSize))
 	return nil
 }
 
@@ -157,7 +158,7 @@ func (s *S3Storage) downloadFile(ctx context.Context, key, destDir, relPath stri
 	}
 	defer func() {
 		if closeErr := resp.Body.Close(); closeErr != nil {
-			fmt.Printf("Warning: failed to close response body: %v\n", closeErr)
+			slog.Warn("failed to close response body", "error", closeErr)
 		}
 	}()
 
@@ -172,7 +173,7 @@ func (s *S3Storage) downloadFile(ctx context.Context, key, destDir, relPath stri
 	}
 	defer func() {
 		if closeErr := dstFile.Close(); closeErr != nil {
-			fmt.Printf("Warning: failed to close file %s: %v\n", dstPath, closeErr)
+			slog.Warn("failed to close file", "path", dstPath, "error", closeErr)
 		}
 	}()
 
@@ -190,7 +191,7 @@ func (s *S3Storage) downloadFileWithProgress(ctx context.Context, key, destDir, 
 	}
 	defer func() {
 		if closeErr := resp.Body.Close(); closeErr != nil {
-			fmt.Printf("Warning: failed to close response body: %v\n", closeErr)
+			slog.Warn("failed to close response body", "error", closeErr)
 		}
 	}()
 
@@ -205,12 +206,12 @@ func (s *S3Storage) downloadFileWithProgress(ctx context.Context, key, destDir, 
 	}
 	defer func() {
 		if closeErr := dstFile.Close(); closeErr != nil {
-			fmt.Printf("Warning: failed to close file %s: %v\n", dstPath, closeErr)
+			slog.Warn("failed to close file", "path", dstPath, "error", closeErr)
 		}
 	}()
 
 	// Show file info with progress
-	fmt.Printf("    [%d/%d] %s (%s)\n", fileNum, totalFiles, relPath, formatSize(size))
+	slog.Info("downloading file", "progress", fmt.Sprintf("%d/%d", fileNum, totalFiles), "file", relPath, "size", formatSize(size))
 
 	_, err = io.Copy(dstFile, resp.Body)
 	return err

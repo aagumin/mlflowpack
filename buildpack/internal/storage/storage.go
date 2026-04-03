@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -91,7 +92,7 @@ func copyFile(src, dst string) error {
 	}
 	defer func() {
 		if closeErr := srcFile.Close(); closeErr != nil {
-			fmt.Printf("Warning: failed to close source file %s: %v\n", src, closeErr)
+			slog.Warn("failed to close source file", "path", src, "error", closeErr)
 		}
 	}()
 
@@ -101,7 +102,7 @@ func copyFile(src, dst string) error {
 	}
 	defer func() {
 		if closeErr := dstFile.Close(); closeErr != nil {
-			fmt.Printf("Warning: failed to close destination file %s: %v\n", dst, closeErr)
+			slog.Warn("failed to close destination file", "path", dst, "error", closeErr)
 		}
 	}()
 

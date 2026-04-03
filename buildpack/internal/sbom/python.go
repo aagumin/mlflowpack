@@ -4,6 +4,7 @@ package sbom
 import (
 	"bufio"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -31,7 +32,7 @@ func ParseMetadata(path string) (Package, error) {
 	}
 	defer func() {
 		if closeErr := file.Close(); closeErr != nil {
-			fmt.Printf("Warning: failed to close metadata file %s: %v\n", path, closeErr)
+			slog.Warn("failed to close metadata file", "path", path, "error", closeErr)
 		}
 	}()
 

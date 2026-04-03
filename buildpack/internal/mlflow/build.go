@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 
@@ -62,7 +63,7 @@ func Build(ctx cnb.BuildContext) (cnb.BuildResult, error) {
 		}
 		defer func() {
 			if err := os.RemoveAll(tempMetaDir); err != nil {
-				fmt.Printf("Warning: failed to cleanup temp directory: %v\n", err)
+				slog.Warn("failed to cleanup temp directory", "error", err)
 			}
 		}()
 
@@ -79,7 +80,7 @@ func Build(ctx cnb.BuildContext) (cnb.BuildResult, error) {
 			return result, fmt.Errorf("creating storage: %w", err)
 		}
 
-		fmt.Printf("Downloading metadata from %s...\n", store.String())
+		slog.Info("Downloading metadata", "source", store.String())
 		if err := store.DownloadMetadata(context.Background(), tempMetaDir); err != nil {
 			return result, fmt.Errorf("downloading model metadata: %w", err)
 		}
@@ -96,9 +97,9 @@ func Build(ctx cnb.BuildContext) (cnb.BuildResult, error) {
 			prevDepsHash = CachedDepsHash(ctx.LayersDir)
 		}
 
-		fmt.Printf("Dependency hash: %s\n", currentDepsHash)
+		slog.Info("Dependency hash computed", "hash", currentDepsHash)
 		if prevDepsHash != "" {
-			fmt.Printf("Previous hash: %s\n", prevDepsHash)
+			slog.Info("Previous hash", "hash", prevDepsHash)
 		}
 
 		// Parse MLmodel from metadata
@@ -111,12 +112,12 @@ func Build(ctx cnb.BuildContext) (cnb.BuildResult, error) {
 		depsChanged := currentDepsHash != prevDepsHash || prevDepsHash == ""
 
 		if !depsChanged {
-			fmt.Println("Dependencies unchanged, reusing cached Python and venv layers")
+			slog.Info("Dependencies unchanged, reusing cached Python and venv layers")
 			// Reuse Python and venv layers (they exist from previous build)
 			result.Layers[layer.PythonLayerName] = cnb.LayerMetadata{Types: layer.DefaultPythonLayerTypes()}
 			result.Layers[layer.VenvLayerName] = cnb.LayerMetadata{Types: layer.DefaultVenvLayerTypes()}
 		} else {
-			fmt.Println("Dependencies changed, rebuilding Python and venv layers")
+			slog.Info("Dependencies changed, rebuilding Python and venv layers")
 			// Will rebuild Python and venv layers below
 		}
 
@@ -144,7 +145,7 @@ func Build(ctx cnb.BuildContext) (cnb.BuildResult, error) {
 		currentUUID := model.UUID()
 
 		if cachedUUID != "" && cachedUUID == currentUUID {
-			fmt.Printf("Model unchanged (UUID: %s), reusing cached layers\n", currentUUID)
+			slog.Info("Model unchanged, reusing cached layers", "uuid", currentUUID)
 
 			// Return cached layer metadata
 			result.Layers[layer.PythonLayerName] = cnb.LayerMetadata{Types: layer.DefaultPythonLayerTypes()}
@@ -169,8 +170,8 @@ func Build(ctx cnb.BuildContext) (cnb.BuildResult, error) {
 	}
 
 	flavor := model.GetPrimaryFlavor()
-	fmt.Printf("Detected model flavor: %s\n", flavor)
-	fmt.Printf("Required MLServer extension: %s\n", mlserverExt.PipPackage)
+	slog.Info("Detected model flavor", "flavor", flavor)
+	slog.Info("Required MLServer extension", "package", mlserverExt.PipPackage)
 
 	dependencies, err := resolveDependencies(model)
 	if err != nil {
@@ -214,7 +215,7 @@ func Build(ctx cnb.BuildContext) (cnb.BuildResult, error) {
 
 		// Install cloudpickle if version specified
 		if dependencies.cloudpicklePkg != "" {
-			fmt.Printf("Installing %s\n", dependencies.cloudpicklePkg)
+			slog.Info("Installing package", "package", dependencies.cloudpicklePkg)
 			if err := installer.InstallDeps(context.Background(), venvPath, []string{dependencies.cloudpicklePkg}); err != nil {
 				return result, fmt.Errorf("installing cloudpickle: %w", err)
 			}
@@ -222,7 +223,7 @@ func Build(ctx cnb.BuildContext) (cnb.BuildResult, error) {
 
 		// Install model dependencies and MLServer packages
 		if dependencies.requirementsPath != "" {
-			fmt.Printf("Installing dependencies from %s\n", filepath.Base(dependencies.requirementsPath))
+			slog.Info("Installing dependencies", "file", filepath.Base(dependencies.requirementsPath))
 			mlserverPkgs := []string{"mlserver", "mlserver-mlflow", mlserverExt.PipPackage}
 			if err := installer.InstallDepsFromFile(context.Background(), venvPath, dependencies.requirementsPath, mlserverPkgs...); err != nil {
 				return result, fmt.Errorf("installing dependencies: %w", err)
@@ -264,7 +265,7 @@ func Build(ctx cnb.BuildContext) (cnb.BuildResult, error) {
 
 	// Phase 2: Download full model for storage type
 	if modelSource.Type == "storage" && store != nil {
-		fmt.Printf("Downloading full model from %s...\n", store.String())
+		slog.Info("Downloading full model", "source", store.String())
 		if err := store.Download(context.Background(), modelPath); err != nil {
 			return result, fmt.Errorf("downloading model: %w", err)
 		}

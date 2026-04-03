@@ -4,6 +4,7 @@ package python
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -101,12 +102,12 @@ func (i *Installer) InstallPython(ctx context.Context, version, installDir strin
 		// Python found, verify it exists
 		pythonPath := strings.TrimSpace(string(output))
 		if _, statErr := os.Stat(pythonPath); statErr == nil {
-			fmt.Printf("Python %s already installed at %s, skipping installation\n", version, pythonPath)
+			slog.Info("Python already installed, skipping", "version", version, "path", pythonPath)
 			return nil
 		}
 	}
 
-	fmt.Printf("Installing Python %s\n", version)
+	slog.Info("Installing Python", "version", version)
 
 	cmd := i.command(ctx,
 		"python", "install",
@@ -157,11 +158,11 @@ func (i *Installer) CreateVenv(ctx context.Context, pythonPath, venvDir string) 
 	// Check if venv already exists
 	venvPythonBin := filepath.Join(venvDir, "bin", "python")
 	if _, err := os.Stat(venvPythonBin); err == nil {
-		fmt.Printf("Virtual environment already exists at %s, skipping creation\n", venvDir)
+		slog.Info("Virtual environment already exists, skipping creation", "path", venvDir)
 		return nil
 	}
 
-	fmt.Printf("Creating venv with Python at %s\n", venvDir)
+	slog.Info("Creating virtual environment", "path", venvDir)
 
 	cmd := i.command(ctx,
 		"venv",

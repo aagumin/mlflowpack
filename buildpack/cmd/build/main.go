@@ -2,9 +2,11 @@ package main
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 
 	"github.com/aagumin/mlflowpack/internal/cnb"
+	"github.com/aagumin/mlflowpack/internal/logger"
 	"github.com/aagumin/mlflowpack/internal/provider"
 
 	// Register providers via init()
@@ -12,8 +14,10 @@ import (
 )
 
 func main() {
+	logger.SetupDefault(os.Stdout, slog.LevelInfo)
+
 	if err := run(); err != nil {
-		fmt.Fprintf(os.Stderr, "ERROR: %v\n", err)
+		slog.Error("build failed", "error", err)
 		os.Exit(1)
 	}
 }

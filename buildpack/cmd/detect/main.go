@@ -1,10 +1,11 @@
 package main
 
 import (
-	"fmt"
+	"log/slog"
 	"os"
 
 	"github.com/aagumin/mlflowpack/internal/cnb"
+	"github.com/aagumin/mlflowpack/internal/logger"
 	"github.com/aagumin/mlflowpack/internal/provider"
 
 	// Register providers via init()
@@ -12,6 +13,8 @@ import (
 )
 
 func main() {
+	logger.SetupDefault(os.Stdout, slog.LevelInfo)
+
 	os.Exit(run())
 }
 
@@ -25,14 +28,14 @@ func run() int {
 
 	wd, err := os.Getwd()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "ERROR: getting working directory: %v\n", err)
+		slog.Error("getting working directory", "error", err)
 		return cnb.ExitCodeErr
 	}
 	ctx.AppDir = wd
 
 	p, result, err := provider.DetectFirst(ctx)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "ERROR: %v\n", err)
+		slog.Error("detection failed", "error", err)
 		return cnb.ExitCodeErr
 	}
 
@@ -51,7 +54,7 @@ func run() int {
 	}
 
 	if err := cnb.WriteBuildPlan(ctx.BuildPlanPath, plan); err != nil {
-		fmt.Fprintf(os.Stderr, "ERROR: writing build plan: %v\n", err)
+		slog.Error("writing build plan", "error", err)
 		return cnb.ExitCodeErr
 	}
 
