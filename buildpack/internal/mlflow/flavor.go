@@ -22,16 +22,42 @@ type MLmodel struct {
 
 // Flavor represents a model flavor configuration.
 type Flavor struct {
-	LoaderModule        string `yaml:"loader_module,omitempty"`
-	ModelPath           string `yaml:"model_path,omitempty"`
-	PickledModel        string `yaml:"pickled_model,omitempty"`
-	Code                string `yaml:"code,omitempty"`
-	SklearnVersion      string `yaml:"sklearn_version,omitempty"`
-	XGBoostVersion      string `yaml:"xgboost_version,omitempty"`
-	LightGBMVersion     string `yaml:"lightgbm_version,omitempty"`
-	TensorflowVersion   string `yaml:"tensorflow_version,omitempty"`
-	PyTorchVersion      string `yaml:"pytorch_version,omitempty"`
-	TransformersVersion string `yaml:"transformers_version,omitempty"`
+	LoaderModule        string     `yaml:"loader_module,omitempty"`
+	ModelPath           string     `yaml:"model_path,omitempty"`
+	PickledModel        string     `yaml:"pickled_model,omitempty"`
+	Code                string     `yaml:"code,omitempty"`
+	PythonVersion       string     `yaml:"python_version,omitempty"`
+	CloudpickleVersion  string     `yaml:"cloudpickle_version,omitempty"`
+	Env                 *FlavorEnv `yaml:"env,omitempty"`
+	SklearnVersion      string     `yaml:"sklearn_version,omitempty"`
+	XGBoostVersion      string     `yaml:"xgboost_version,omitempty"`
+	LightGBMVersion     string     `yaml:"lightgbm_version,omitempty"`
+	TensorflowVersion   string     `yaml:"tensorflow_version,omitempty"`
+	PyTorchVersion      string     `yaml:"pytorch_version,omitempty"`
+	TransformersVersion string     `yaml:"transformers_version,omitempty"`
+}
+
+// FlavorEnv points to environment files within the model directory.
+// In MLmodel, env can be a string (e.g. "conda.yaml") or a map with conda/virtualenv keys.
+type FlavorEnv struct {
+	Conda      string `yaml:"conda,omitempty"`
+	Virtualenv string `yaml:"virtualenv,omitempty"`
+}
+
+// UnmarshalYAML implements custom YAML unmarshaling for FlavorEnv.
+func (e *FlavorEnv) UnmarshalYAML(value *yaml.Node) error {
+	// Try string first: env: conda.yaml
+	if value.Kind == yaml.ScalarNode {
+		filename := value.Value
+		if filename == "conda.yaml" {
+			e.Conda = filename
+		}
+		return nil
+	}
+
+	// Otherwise unmarshal as struct with conda/virtualenv keys
+	type plain FlavorEnv
+	return value.Decode((*plain)(e))
 }
 
 // MLServerExtension maps MLflow flavors to MLServer extensions.
@@ -146,4 +172,28 @@ func (m *MLmodel) GetRuntimeImplementation() (string, error) {
 	}
 
 	return ext.Runtime, nil
+}
+
+// PythonVersion returns the Python version from the python_function flavor.
+func (m *MLmodel) PythonVersion() string {
+	if pf, ok := m.Flavors["python_function"]; ok {
+		return pf.PythonVersion
+	}
+	return ""
+}
+
+// CloudpickleVersion returns the cloudpickle version from the python_function flavor.
+func (m *MLmodel) CloudpickleVersion() string {
+	if pf, ok := m.Flavors["python_function"]; ok {
+		return pf.CloudpickleVersion
+	}
+	return ""
+}
+
+// VirtualenvFile returns the virtualenv filename (e.g. "python_env.yaml") from the python_function flavor.
+func (m *MLmodel) VirtualenvFile() string {
+	if pf, ok := m.Flavors["python_function"]; ok && pf.Env != nil {
+		return pf.Env.Virtualenv
+	}
+	return ""
 }

@@ -4,96 +4,162 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/aagumin/mlflowpack/internal/python"
 )
 
-func TestResolveDependencies_FallbackToRequirementsWhenNoConda(t *testing.T) {
+func TestResolveDependencies_FromMLmodel(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	requirementsPath := filepath.Join(dir, RequirementsFile)
-	if err := os.WriteFile(requirementsPath, []byte("pandas==2.2.0\n"), 0o644); err != nil {
+
+	// Create MLmodel with python_version and cloudpickle_version
+	mlmodelContent := []byte(`artifact_path: model
+flavors:
+  python_function:
+    cloudpickle_version: 2.2.1
+    code: code
+    env:
+      virtualenv: python_env.yaml
+    loader_module: mlflow.pyfunc.model
+    python_model: python_model.pkl
+    python_version: 3.10.16
+    streamable: false
+mlflow_version: 2.15.0
+model_uuid: test-uuid
+`)
+	if err := os.WriteFile(filepath.Join(dir, MLmodelFile), mlmodelContent, 0o644); err != nil {
+		t.Fatalf("write MLmodel: %v", err)
+	}
+
+	// Create python_env.yaml with -r requirements.txt
+	pythonEnvContent := []byte(`python: 3.10.16
+build_dependencies:
+- pip
+- setuptools
+- wheel
+dependencies:
+- -r requirements.txt
+`)
+	if err := os.WriteFile(filepath.Join(dir, "python_env.yaml"), pythonEnvContent, 0o644); err != nil {
+		t.Fatalf("write python_env.yaml: %v", err)
+	}
+
+	// Create requirements.txt with flags
+	reqContent := []byte(`pandas==2.2.0
+--extra-index-url https://example.com/pypi/simple
+`)
+	if err := os.WriteFile(filepath.Join(dir, RequirementsFile), reqContent, 0o644); err != nil {
 		t.Fatalf("write requirements.txt: %v", err)
 	}
 
 	model := NewLocalModel(dir)
+	if err := model.ParseMLmodel(); err != nil {
+		t.Fatalf("ParseMLmodel: %v", err)
+	}
 
-	deps, err := resolveDependencies(model, "mlserver-sklearn")
+	deps, err := resolveDependencies(model)
 	if err != nil {
-		t.Fatalf("resolveDependencies returned error: %v", err)
+		t.Fatalf("resolveDependencies: %v", err)
 	}
 
-	if deps.requirementsPath != requirementsPath {
-		t.Fatalf("requirementsPath = %q, want %q", deps.requirementsPath, requirementsPath)
+	if deps.pythonVersion != "3.10.16" {
+		t.Fatalf("pythonVersion = %q, want 3.10.16", deps.pythonVersion)
 	}
 
-	pipDeps := deps.conda.PipDependencies()
-	for _, pkg := range []string{"mlserver", "mlserver-mlflow", "mlserver-sklearn"} {
-		if !containsString(pipDeps, pkg) {
-			t.Fatalf("missing required package %q in %v", pkg, pipDeps)
-		}
+	if deps.cloudpicklePkg != "cloudpickle==2.2.1" {
+		t.Fatalf("cloudpicklePkg = %q, want cloudpickle==2.2.1", deps.cloudpicklePkg)
+	}
+
+	wantReqPath := filepath.Join(dir, RequirementsFile)
+	if deps.requirementsPath != wantReqPath {
+		t.Fatalf("requirementsPath = %q, want %q", deps.requirementsPath, wantReqPath)
 	}
 }
 
-func TestResolveDependencies_CondaTakesPrecedenceOverRequirements(t *testing.T) {
+func TestResolveDependencies_DefaultPythonVersion(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	condaPath := filepath.Join(dir, CondaFile)
-	condaYAML := []byte("dependencies:\n  - python=3.11\n  - pip:\n    - numpy==2.0.0\n")
-	if err := os.WriteFile(condaPath, condaYAML, 0o644); err != nil {
-		t.Fatalf("write conda.yaml: %v", err)
+
+	// MLmodel without python_version
+	mlmodelContent := []byte(`artifact_path: model
+flavors:
+  python_function:
+    cloudpickle_version: ""
+    code: code
+    loader_module: mlflow.pyfunc.model
+    python_model: python_model.pkl
+    python_version: ""
+mlflow_version: 2.15.0
+model_uuid: test-uuid
+`)
+	if err := os.WriteFile(filepath.Join(dir, MLmodelFile), mlmodelContent, 0o644); err != nil {
+		t.Fatalf("write MLmodel: %v", err)
 	}
 
-	requirementsPath := filepath.Join(dir, RequirementsFile)
-	if err := os.WriteFile(requirementsPath, []byte("pandas==2.2.0\n"), 0o644); err != nil {
+	model := NewLocalModel(dir)
+	if err := model.ParseMLmodel(); err != nil {
+		t.Fatalf("ParseMLmodel: %v", err)
+	}
+
+	deps, err := resolveDependencies(model)
+	if err != nil {
+		t.Fatalf("resolveDependencies: %v", err)
+	}
+
+	if deps.pythonVersion != python.DefaultPythonVersion {
+		t.Fatalf("pythonVersion = %q, want %q", deps.pythonVersion, python.DefaultPythonVersion)
+	}
+
+	if deps.cloudpicklePkg != "" {
+		t.Fatalf("cloudpicklePkg = %q, want empty", deps.cloudpicklePkg)
+	}
+}
+
+func TestResolveDependencies_RequirementsWithoutPythonEnv(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+
+	// MLmodel with python_version but no virtualenv reference
+	mlmodelContent := []byte(`artifact_path: model
+flavors:
+  python_function:
+    code: code
+    loader_module: mlflow.pyfunc.model
+    python_model: python_model.pkl
+    python_version: 3.11.0
+mlflow_version: 2.15.0
+model_uuid: test-uuid
+`)
+	if err := os.WriteFile(filepath.Join(dir, MLmodelFile), mlmodelContent, 0o644); err != nil {
+		t.Fatalf("write MLmodel: %v", err)
+	}
+
+	// Just a requirements.txt without python_env.yaml
+	reqContent := []byte(`numpy==1.24.0
+`)
+	if err := os.WriteFile(filepath.Join(dir, RequirementsFile), reqContent, 0o644); err != nil {
 		t.Fatalf("write requirements.txt: %v", err)
 	}
 
 	model := NewLocalModel(dir)
+	if err := model.ParseMLmodel(); err != nil {
+		t.Fatalf("ParseMLmodel: %v", err)
+	}
 
-	deps, err := resolveDependencies(model, "mlserver-sklearn")
+	deps, err := resolveDependencies(model)
 	if err != nil {
-		t.Fatalf("resolveDependencies returned error: %v", err)
+		t.Fatalf("resolveDependencies: %v", err)
 	}
 
-	if deps.requirementsPath != "" {
-		t.Fatalf("requirementsPath = %q, want empty (conda should take precedence)", deps.requirementsPath)
+	if deps.pythonVersion != "3.11.0" {
+		t.Fatalf("pythonVersion = %q, want 3.11.0", deps.pythonVersion)
 	}
 
-	if got := deps.conda.PythonVersion(); got != "3.11" {
-		t.Fatalf("python version = %q, want 3.11", got)
+	wantReqPath := filepath.Join(dir, RequirementsFile)
+	if deps.requirementsPath != wantReqPath {
+		t.Fatalf("requirementsPath = %q, want %q (fallback to direct requirements.txt)", deps.requirementsPath, wantReqPath)
 	}
-
-	pipDeps := deps.conda.PipDependencies()
-	for _, pkg := range []string{"numpy==2.0.0", "mlserver", "mlserver-mlflow", "mlserver-sklearn"} {
-		if !containsString(pipDeps, pkg) {
-			t.Fatalf("missing required package %q in %v", pkg, pipDeps)
-		}
-	}
-}
-
-func TestResolveDependencies_ErrorsOnInvalidConda(t *testing.T) {
-	t.Parallel()
-
-	dir := t.TempDir()
-	condaPath := filepath.Join(dir, CondaFile)
-	if err := os.WriteFile(condaPath, []byte("dependencies: ["), 0o644); err != nil {
-		t.Fatalf("write invalid conda.yaml: %v", err)
-	}
-
-	model := NewLocalModel(dir)
-
-	_, err := resolveDependencies(model, "mlserver-sklearn")
-	if err == nil {
-		t.Fatal("expected error for invalid conda.yaml, got nil")
-	}
-}
-
-func containsString(items []string, want string) bool {
-	for _, item := range items {
-		if item == want {
-			return true
-		}
-	}
-	return false
 }

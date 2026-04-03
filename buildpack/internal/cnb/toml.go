@@ -89,3 +89,13 @@ func ReadBuildPlan(path string) (BuildPlan, error) {
 	}
 	return plan, nil
 }
+
+// ReadBuildpackPlan reads a Buildpack Plan from the specified path (CNB_BP_PLAN_PATH).
+func ReadBuildpackPlan(path string) (BuildpackPlan, error) {
+	var plan BuildpackPlan
+	_, err := toml.DecodeFile(path, &plan)
+	if err != nil {
+		return BuildpackPlan{}, fmt.Errorf("reading buildpack plan: %w", err)
+	}
+	return plan, nil
+}

@@ -69,14 +69,26 @@ type DetectResult struct {
 	Pass bool
 }
 
-// BuildPlan represents the build plan written during detect.
+// BuildPlan represents the build plan written during detect (CNB_BUILD_PLAN_PATH).
 type BuildPlan struct {
 	Provides []BuildPlanEntry `toml:"provides"`
 	Requires []BuildPlanEntry `toml:"requires"`
 }
 
-// BuildPlanEntry represents a single provides/requires entry.
+// BuildPlanEntry represents a single provides/requires entry in a Build Plan.
 type BuildPlanEntry struct {
+	Name     string                 `toml:"name"`
+	Metadata map[string]interface{} `toml:"metadata,omitempty"`
+}
+
+// BuildpackPlan represents the Buildpack Plan read during build (CNB_BP_PLAN_PATH).
+// The lifecycle resolves the Build Plan into this format for each buildpack.
+type BuildpackPlan struct {
+	Entries []BuildpackPlanEntry `toml:"entries"`
+}
+
+// BuildpackPlanEntry represents a single entry in the Buildpack Plan.
+type BuildpackPlanEntry struct {
 	Name     string                 `toml:"name"`
 	Metadata map[string]interface{} `toml:"metadata,omitempty"`
 }

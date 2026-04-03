@@ -33,15 +33,15 @@ func run() error {
 	}
 	ctx.AppDir = wd
 
-	// Read provider name from build plan
-	plan, err := cnb.ReadBuildPlan(ctx.BpPlanPath)
+	// Read provider name from buildpack plan
+	plan, err := cnb.ReadBuildpackPlan(ctx.BpPlanPath)
 	if err != nil {
-		return fmt.Errorf("reading build plan: %w", err)
+		return fmt.Errorf("reading buildpack plan: %w", err)
 	}
 
 	var providerName string
-	for _, req := range plan.Requires {
-		if v, ok := req.Metadata["provider"].(string); ok {
+	for _, entry := range plan.Entries {
+		if v, ok := entry.Metadata["provider"].(string); ok {
 			providerName = v
 			break
 		}

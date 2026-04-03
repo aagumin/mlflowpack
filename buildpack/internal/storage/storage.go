@@ -11,7 +11,7 @@ import (
 )
 
 // _metadataFiles is the list of files to download in metadata-only mode.
-var _metadataFiles = []string{"MLmodel", "conda.yaml", "requirements.txt"}
+var _metadataFiles = []string{"MLmodel", "conda.yaml", "requirements.txt", "python_env.yaml"}
 
 // LocalStorage implements Storage for local filesystem.
 type LocalStorage struct {
@@ -114,7 +114,7 @@ type Storage interface {
 	// Download downloads model files to destDir.
 	Download(ctx context.Context, destDir string) error
 
-	// DownloadMetadata downloads only metadata files (MLmodel, conda.yaml, requirements.txt).
+	// DownloadMetadata downloads only metadata files (MLmodel, conda.yaml, requirements.txt, python_env.yaml).
 	DownloadMetadata(ctx context.Context, destDir string) error
 
 	// Exists checks if the model path exists.

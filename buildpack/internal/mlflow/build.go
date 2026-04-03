@@ -8,10 +8,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/aagumin/mlflowpack/internal/cnb"
-	"github.com/aagumin/mlflowpack/internal/conda"
 	"github.com/aagumin/mlflowpack/internal/deps"
 	"github.com/aagumin/mlflowpack/internal/layer"
 	"github.com/aagumin/mlflowpack/internal/python"
@@ -174,7 +172,7 @@ func Build(ctx cnb.BuildContext) (cnb.BuildResult, error) {
 	fmt.Printf("Detected model flavor: %s\n", flavor)
 	fmt.Printf("Required MLServer extension: %s\n", mlserverExt.PipPackage)
 
-	dependencies, err := resolveDependencies(model, mlserverExt.PipPackage)
+	dependencies, err := resolveDependencies(model)
 	if err != nil {
 		return result, err
 	}
@@ -199,30 +197,41 @@ func Build(ctx cnb.BuildContext) (cnb.BuildResult, error) {
 			return result, fmt.Errorf("creating venv layer: %w", err)
 		}
 
-		// Install Python and dependencies using uv
+		// Install Python and create venv using uv
 		uvEnv, err := installerEnv(ctx, pythonPath)
 		if err != nil {
 			return result, fmt.Errorf("configuring uv environment: %w", err)
 		}
 		installer := python.NewInstallerWithPathAndEnv("uv", uvEnv)
-		if err := installer.SetupFromConda(context.Background(), dependencies.conda, pythonPath, venvPath); err != nil {
+		if err := installer.SetupPython(context.Background(), dependencies.pythonVersion, pythonPath, venvPath); err != nil {
 			return result, fmt.Errorf("setting up Python: %w", err)
 		}
 
 		// Write Python SBOM
-		pythonVersion := dependencies.conda.PythonVersion()
-		if pythonVersion == "" {
-			pythonVersion = python.DefaultPythonVersion
-		}
-
-		if err := sbom.WritePythonSBOM(ctx.LayersDir, pythonVersion); err != nil {
+		if err := sbom.WritePythonSBOM(ctx.LayersDir, dependencies.pythonVersion); err != nil {
 			return result, fmt.Errorf("writing python SBOM: %w", err)
 		}
 
+		// Install cloudpickle if version specified
+		if dependencies.cloudpicklePkg != "" {
+			fmt.Printf("Installing %s\n", dependencies.cloudpicklePkg)
+			if err := installer.InstallDeps(context.Background(), venvPath, []string{dependencies.cloudpicklePkg}); err != nil {
+				return result, fmt.Errorf("installing cloudpickle: %w", err)
+			}
+		}
+
+		// Install model dependencies and MLServer packages
 		if dependencies.requirementsPath != "" {
-			fmt.Printf("conda.yaml not found; installing dependencies from %s\n", filepath.Base(dependencies.requirementsPath))
-			if err := installer.InstallDepsFromFile(context.Background(), venvPath, dependencies.requirementsPath); err != nil {
-				return result, fmt.Errorf("installing dependencies from requirements.txt: %w", err)
+			fmt.Printf("Installing dependencies from %s\n", filepath.Base(dependencies.requirementsPath))
+			mlserverPkgs := []string{"mlserver", "mlserver-mlflow", mlserverExt.PipPackage}
+			if err := installer.InstallDepsFromFile(context.Background(), venvPath, dependencies.requirementsPath, mlserverPkgs...); err != nil {
+				return result, fmt.Errorf("installing dependencies: %w", err)
+			}
+		} else {
+			// No requirements.txt — install only MLServer packages
+			mlserverPkgs := []string{"mlserver", "mlserver-mlflow", mlserverExt.PipPackage}
+			if err := installer.InstallDeps(context.Background(), venvPath, mlserverPkgs); err != nil {
+				return result, fmt.Errorf("installing MLServer packages: %w", err)
 			}
 		}
 
@@ -269,10 +278,7 @@ func Build(ctx cnb.BuildContext) (cnb.BuildResult, error) {
 	}
 
 	// Get Python version for metadata
-	pythonVersion := dependencies.conda.PythonVersion()
-	if pythonVersion == "" {
-		pythonVersion = python.DefaultPythonVersion
-	}
+	pythonVersion := dependencies.pythonVersion
 
 	// Set model layer metadata with UUID
 	result.Layers[layer.ModelLayerName] = cnb.LayerMetadata{
@@ -392,7 +398,8 @@ type modelSource struct {
 }
 
 type dependencySource struct {
-	conda            *conda.File
+	pythonVersion    string
+	cloudpicklePkg   string // e.g. "cloudpickle==2.2.1"
 	requirementsPath string
 }
 
@@ -442,75 +449,43 @@ func getModel(ctx cnb.BuildContext, source *modelSource) (*Model, error) {
 	return nil, fmt.Errorf("unsupported model source type: %s", source.Type)
 }
 
-func parseConda(model *Model) (*conda.File, error) {
-	if !model.HasConda() {
-		// Return default conda file
-		return &conda.File{
-			Dependencies: []conda.Dependency{
-				{Name: "python", Version: python.DefaultPythonVersion},
-			},
-		}, nil
+func resolveDependencies(model *Model) (dependencySource, error) {
+	// Get Python version from MLmodel python_function flavor
+	pythonVersion := model.MLmodel.PythonVersion()
+	if pythonVersion == "" {
+		pythonVersion = python.DefaultPythonVersion
 	}
 
-	return conda.ParseFile(model.CondaPath())
-}
-
-func resolveDependencies(model *Model, extensionPackage string) (dependencySource, error) {
-	condaFile, err := parseConda(model)
-	if err != nil {
-		return dependencySource{}, err
+	// Get cloudpickle version from MLmodel
+	var cloudpicklePkg string
+	if cpv := model.MLmodel.CloudpickleVersion(); cpv != "" {
+		cloudpicklePkg = "cloudpickle==" + cpv
 	}
 
-	addMLServerDependencies(condaFile, extensionPackage)
-
-	deps := dependencySource{
-		conda: condaFile,
-	}
-	if !model.HasConda() && model.HasRequirements() {
-		deps.requirementsPath = model.RequirementsPath()
-	}
-
-	return deps, nil
-}
-
-// addMLServerDependencies adds MLServer core and extension to conda dependencies if not present.
-func addMLServerDependencies(condaFile *conda.File, extensionPackage string) {
-	pipDeps := condaFile.PipDependencies()
-
-	// Packages to add
-	packagesToAdd := []string{"mlserver", "mlserver-mlflow", extensionPackage}
-
-	// Filter out already present packages
-	var newPackages []string
-	for _, pkg := range packagesToAdd {
-		found := false
-		for _, dep := range pipDeps {
-			if dep == pkg || strings.HasPrefix(dep, pkg+"==") {
-				found = true
-				break
-			}
+	// Read python_env.yaml for requirements path
+	var requirementsPath string
+	if venvFile := model.MLmodel.VirtualenvFile(); venvFile != "" {
+		envPath := filepath.Join(model.Path, venvFile)
+		env, err := ParsePythonEnvFile(envPath)
+		if err != nil {
+			return dependencySource{}, fmt.Errorf("reading %s: %w", venvFile, err)
 		}
-		if !found {
-			newPackages = append(newPackages, pkg)
+
+		if reqFile := env.RequirementsFile(model.Path); reqFile != "" {
+			requirementsPath = filepath.Join(model.Path, reqFile)
 		}
 	}
 
-	if len(newPackages) == 0 {
-		return
+	// Fallback: check for requirements.txt directly in model dir
+	if requirementsPath == "" && model.HasRequirements() {
+		requirementsPath = model.RequirementsPath()
 	}
 
-	// Find pip block and add the packages
-	for i := range condaFile.Dependencies {
-		if condaFile.Dependencies[i].IsPipBlock() {
-			condaFile.Dependencies[i].Pip = append(condaFile.Dependencies[i].Pip, newPackages...)
-			return
-		}
-	}
-
-	// No pip block found, add one
-	condaFile.Dependencies = append(condaFile.Dependencies, conda.Dependency{
-		Pip: newPackages,
-	})
+	return dependencySource{
+		pythonVersion:    pythonVersion,
+		cloudpicklePkg:  cloudpicklePkg,
+		requirementsPath: requirementsPath,
+	}, nil
 }
 
 func copyModel(model *Model, destPath string) error {

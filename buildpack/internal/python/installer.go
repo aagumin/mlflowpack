@@ -176,6 +176,24 @@ func (i *Installer) CreateVenv(ctx context.Context, pythonPath, venvDir string) 
 	return nil
 }
 
+// SetupPython installs Python and creates a virtual environment without installing dependencies.
+func (i *Installer) SetupPython(ctx context.Context, version, pythonDir, venvDir string) error {
+	if version == "" {
+		version = DefaultPythonVersion
+	}
+
+	if err := i.InstallPython(ctx, version, pythonDir); err != nil {
+		return err
+	}
+
+	pythonBin, err := findPythonBinary(pythonDir)
+	if err != nil {
+		return fmt.Errorf("finding python binary: %w", err)
+	}
+
+	return i.CreateVenv(ctx, pythonBin, venvDir)
+}
+
 // InstallDeps installs pip dependencies using uv.
 func (i *Installer) InstallDeps(ctx context.Context, venvDir string, deps []string) error {
 	if len(deps) == 0 {
@@ -199,15 +217,20 @@ func (i *Installer) InstallDeps(ctx context.Context, venvDir string, deps []stri
 	return nil
 }
 
-// InstallDepsFromFile installs dependencies from a requirements.txt file.
-func (i *Installer) InstallDepsFromFile(ctx context.Context, venvDir, requirementsFile string) error {
+// InstallDepsFromFile installs dependencies from a requirements.txt file,
+// plus any extra packages specified as additional arguments.
+// Uses: uv pip install --python <bin> -r <file> [extraPkgs...]
+func (i *Installer) InstallDepsFromFile(ctx context.Context, venvDir, requirementsFile string, extraPkgs ...string) error {
 	pythonBin := filepath.Join(venvDir, "bin", "python")
 
-	cmd := i.command(ctx,
+	args := []string{
 		"pip", "install",
 		"--python", pythonBin,
 		"-r", requirementsFile,
-	)
+	}
+	args = append(args, extraPkgs...)
+
+	cmd := i.command(ctx, args...)
 
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("installing dependencies from file: %w", err)

@@ -17,6 +17,9 @@ const (
 
 	// RequirementsFile is the name of the requirements file.
 	RequirementsFile = "requirements.txt"
+
+	// PythonEnvFile is the name of the MLflow Python environment file.
+	PythonEnvFile = "python_env.yaml"
 )
 
 // Model represents an MLflow model.
