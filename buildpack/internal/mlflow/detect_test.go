@@ -82,9 +82,8 @@ func TestDetect(t *testing.T) {
 	t.Run("passes with nested local model", func(t *testing.T) {
 		appDir := t.TempDir()
 		writeMLmodelFile(t, filepath.Join(appDir, "nested", "model"))
-		buildPlanPath := filepath.Join(t.TempDir(), "buildplan.toml")
 
-		res, err := Detect(cnb.DetectContext{AppDir: appDir, BuildPlanPath: buildPlanPath})
+		res, err := Detect(cnb.DetectContext{AppDir: appDir})
 		if err != nil {
 			t.Fatalf("Detect() error = %v", err)
 		}
@@ -122,9 +121,8 @@ func TestDetect(t *testing.T) {
 	t.Run("s3 uri in model path env passes detection", func(t *testing.T) {
 		appDir := t.TempDir()
 		t.Setenv(EnvModelPath, "s3://bucket/path/to/model")
-		buildPlanPath := filepath.Join(t.TempDir(), "buildplan.toml")
 
-		res, err := Detect(cnb.DetectContext{AppDir: appDir, BuildPlanPath: buildPlanPath})
+		res, err := Detect(cnb.DetectContext{AppDir: appDir})
 		if err != nil {
 			t.Fatalf("Detect() error = %v", err)
 		}

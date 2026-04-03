@@ -2,7 +2,6 @@ package mlflow
 
 import (
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,11 +14,10 @@ const EnvModelPath = "BP_MLFLOW_MODEL_PATH"
 
 // Detect checks if an MLmodel file exists in the application directory
 // or a storage path is provided via BP_MLFLOW_MODEL_PATH.
-// If found, it returns a build plan that provides "mlflow-model".
 func Detect(ctx cnb.DetectContext) (cnb.DetectResult, error) {
 	// Check for storage path (s3:// or file:// or absolute path)
 	if _, _, ok := DetectStoragePath(); ok {
-		return writePlanAndPass(ctx)
+		return cnb.DetectResult{Pass: true}, nil
 	}
 
 	// Check for local MLmodel file
@@ -28,26 +26,6 @@ func Detect(ctx cnb.DetectContext) (cnb.DetectResult, error) {
 			return cnb.DetectResult{Pass: false}, nil
 		}
 		return cnb.DetectResult{}, err
-	}
-
-	return writePlanAndPass(ctx)
-}
-
-// writePlanAndPass writes the build plan and returns a passing result.
-// The buildpack both requires and provides mlflow-model, allowing it to work
-// standalone while also enabling other buildpacks to depend on it.
-func writePlanAndPass(ctx cnb.DetectContext) (cnb.DetectResult, error) {
-	plan := cnb.BuildPlan{
-		Provides: []cnb.BuildPlanEntry{
-			{Name: "mlflow-model"},
-		},
-		Requires: []cnb.BuildPlanEntry{
-			{Name: "mlflow-model"},
-		},
-	}
-
-	if err := cnb.WriteBuildPlan(ctx.BuildPlanPath, plan); err != nil {
-		return cnb.DetectResult{}, fmt.Errorf("writing build plan: %w", err)
 	}
 
 	return cnb.DetectResult{Pass: true}, nil
